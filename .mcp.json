@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "foodlog": {
+      "command": "/home/ryan/foodlog/.venv/bin/python",
+      "args": ["/home/ryan/foodlog/mcp_server/server.py"]
+    }
+  }
+}

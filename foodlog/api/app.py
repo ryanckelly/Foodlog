@@ -36,3 +36,10 @@ def create_app() -> FastAPI:
     app.include_router(foods_router)
 
     return app
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    app = create_app()
+    uvicorn.run(app, host=settings.foodlog_host, port=settings.foodlog_port)
