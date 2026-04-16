@@ -253,3 +253,26 @@ def test_search_foods(client):
 def test_search_foods_missing_query(client):
     resp = client.get("/foods/search")
     assert resp.status_code == 422
+
+
+def test_mcp_endpoint_initialize(client):
+    """Verify the mounted MCP endpoint responds to JSON-RPC initialize."""
+    resp = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "pytest", "version": "0"},
+            },
+        },
+        headers={"Accept": "application/json, text/event-stream"},
+    )
+    assert resp.status_code == 200
+    # Response is SSE-formatted (event-stream)
+    assert "jsonrpc" in resp.text
+    assert '"protocolVersion":"2024-11-05"' in resp.text
+    assert '"serverInfo"' in resp.text
