@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "foodlog": {
-      "command": "/home/ryan/foodlog/.venv/bin/python",
-      "args": ["/home/ryan/foodlog/mcp_server/server.py"]
+      "type": "http",
+      "url": "http://localhost:3473/mcp"
     }
   }
 }
