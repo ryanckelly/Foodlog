@@ -63,3 +63,63 @@ async def test_usda_search_empty():
         results = await client.search("xyznonexistent")
 
     assert results == []
+
+
+# --- FatSecret Client Tests ---
+
+from foodlog.clients.fatsecret import FatSecretClient
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fatsecret_search():
+    respx.get("https://platform.fatsecret.com/rest/server.api").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "foods": {
+                    "food": [
+                        {
+                            "food_id": "33691",
+                            "food_name": "Chicken Breast",
+                            "food_type": "Generic",
+                            "food_description": "Per 100g - Calories: 165kcal | Fat: 3.57g | Carbs: 0.00g | Protein: 31.02g",
+                        }
+                    ]
+                }
+            },
+        )
+    )
+
+    async with httpx.AsyncClient() as http:
+        client = FatSecretClient(
+            consumer_key="test-key",
+            consumer_secret="test-secret",
+            http_client=http,
+        )
+        results = await client.search("chicken breast")
+
+    assert len(results) == 1
+    assert results[0].food_name == "Chicken Breast"
+    assert results[0].source == "fatsecret"
+    assert results[0].food_id == "33691"
+    assert results[0].calories == 165.0
+    assert results[0].protein_g == 31.02
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fatsecret_search_empty():
+    respx.get("https://platform.fatsecret.com/rest/server.api").mock(
+        return_value=httpx.Response(200, json={"foods": {"total_results": "0"}})
+    )
+
+    async with httpx.AsyncClient() as http:
+        client = FatSecretClient(
+            consumer_key="test-key",
+            consumer_secret="test-secret",
+            http_client=http,
+        )
+        results = await client.search("xyznonexistent")
+
+    assert results == []
