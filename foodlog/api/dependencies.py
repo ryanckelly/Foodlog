@@ -34,8 +34,8 @@ def get_fatsecret_client() -> FatSecretClient | None:
     if not settings.fatsecret_configured:
         return None
     return FatSecretClient(
-        consumer_key=settings.fatsecret_consumer_key,
-        consumer_secret=settings.fatsecret_consumer_secret,
+        client_id=settings.fatsecret_consumer_key,
+        client_secret=settings.fatsecret_consumer_secret,
         http_client=get_http_client(),
     )
 

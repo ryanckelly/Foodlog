@@ -1,46 +1,11 @@
-import base64
-import hashlib
-import hmac
 import re
-import time
-import urllib.parse
-import uuid
 
 import httpx
 
 from foodlog.models.schemas import FoodSearchResult
 
-FATSECRET_API_URL = "https://platform.fatsecret.com/rest/server.api"
-
-
-def _oauth_sign(consumer_key: str, consumer_secret: str, params: dict) -> dict:
-    """Add OAuth 1.0 two-legged signature to params."""
-    oauth_params = {
-        "oauth_consumer_key": consumer_key,
-        "oauth_nonce": uuid.uuid4().hex,
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": str(int(time.time())),
-        "oauth_version": "1.0",
-    }
-    all_params = {**params, **oauth_params}
-
-    sorted_encoded = "&".join(
-        f"{urllib.parse.quote(k, safe='')}"
-        f"={urllib.parse.quote(str(v), safe='')}"
-        for k, v in sorted(all_params.items())
-    )
-    base_string = "&".join(
-        urllib.parse.quote(s, safe="")
-        for s in ["GET", FATSECRET_API_URL, sorted_encoded]
-    )
-
-    signing_key = f"{urllib.parse.quote(consumer_secret, safe='')}&"
-    sig = base64.b64encode(
-        hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
-    ).decode()
-
-    all_params["oauth_signature"] = sig
-    return all_params
+FATSECRET_TOKEN_URL = "https://oauth.fatsecret.com/connect/token"
+FATSECRET_API_URL = "https://platform.fatsecret.com/rest/foods/search/v1"
 
 
 def _parse_description(desc: str) -> dict:
@@ -68,28 +33,57 @@ def _parse_description(desc: str) -> dict:
 class FatSecretClient:
     def __init__(
         self,
-        consumer_key: str,
-        consumer_secret: str,
+        client_id: str,
+        client_secret: str,
         http_client: httpx.AsyncClient,
     ):
-        self.consumer_key = consumer_key
-        self.consumer_secret = consumer_secret
+        self.client_id = client_id
+        self.client_secret = client_secret
         self.http = http_client
+        self._access_token: str | None = None
+
+    async def _get_token(self) -> str:
+        """Get an OAuth 2.0 access token using client credentials grant."""
+        if self._access_token:
+            return self._access_token
+
+        resp = await self.http.post(
+            FATSECRET_TOKEN_URL,
+            data={"grant_type": "client_credentials", "scope": "basic"},
+            auth=(self.client_id, self.client_secret),
+        )
+        resp.raise_for_status()
+        self._access_token = resp.json()["access_token"]
+        return self._access_token
 
     async def search(
         self, query: str, max_results: int = 10
     ) -> list[FoodSearchResult]:
-        params = _oauth_sign(
-            self.consumer_key,
-            self.consumer_secret,
-            {
-                "method": "foods.search",
+        token = await self._get_token()
+        resp = await self.http.get(
+            FATSECRET_API_URL,
+            params={
                 "search_expression": query,
                 "format": "json",
-                "max_results": str(max_results),
+                "max_results": max_results,
             },
+            headers={"Authorization": f"Bearer {token}"},
         )
-        resp = await self.http.get(FATSECRET_API_URL, params=params)
+
+        # If token expired, refresh and retry once
+        if resp.status_code == 401:
+            self._access_token = None
+            token = await self._get_token()
+            resp = await self.http.get(
+                FATSECRET_API_URL,
+                params={
+                    "search_expression": query,
+                    "format": "json",
+                    "max_results": max_results,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
         resp.raise_for_status()
         data = resp.json()
 

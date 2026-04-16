@@ -73,7 +73,12 @@ from foodlog.clients.fatsecret import FatSecretClient
 @respx.mock
 @pytest.mark.asyncio
 async def test_fatsecret_search():
-    respx.get("https://platform.fatsecret.com/rest/server.api").mock(
+    respx.post("https://oauth.fatsecret.com/connect/token").mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "fake-token", "expires_in": 86400}
+        )
+    )
+    respx.get("https://platform.fatsecret.com/rest/foods/search/v1").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -93,8 +98,8 @@ async def test_fatsecret_search():
 
     async with httpx.AsyncClient() as http:
         client = FatSecretClient(
-            consumer_key="test-key",
-            consumer_secret="test-secret",
+            client_id="test-key",
+            client_secret="test-secret",
             http_client=http,
         )
         results = await client.search("chicken breast")
@@ -110,14 +115,19 @@ async def test_fatsecret_search():
 @respx.mock
 @pytest.mark.asyncio
 async def test_fatsecret_search_empty():
-    respx.get("https://platform.fatsecret.com/rest/server.api").mock(
+    respx.post("https://oauth.fatsecret.com/connect/token").mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "fake-token", "expires_in": 86400}
+        )
+    )
+    respx.get("https://platform.fatsecret.com/rest/foods/search/v1").mock(
         return_value=httpx.Response(200, json={"foods": {"total_results": "0"}})
     )
 
     async with httpx.AsyncClient() as http:
         client = FatSecretClient(
-            consumer_key="test-key",
-            consumer_secret="test-secret",
+            client_id="test-key",
+            client_secret="test-secret",
             http_client=http,
         )
         results = await client.search("xyznonexistent")
