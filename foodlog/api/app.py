@@ -27,4 +27,8 @@ def create_app() -> FastAPI:
             "usda": settings.usda_configured,
         }
 
+    from foodlog.api.routers.entries import router as entries_router
+
+    app.include_router(entries_router)
+
     return app
