@@ -23,6 +23,15 @@ def get_db() -> Generator[Session, None, None]:
         session.close()
 
 
+def get_session_factory_cached():
+    """Return a cached sessionmaker. Used by MCP tools that open short-lived
+    sessions directly, rather than going through FastAPI dependency injection."""
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = get_session_factory()
+    return _session_factory
+
+
 def get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None:
