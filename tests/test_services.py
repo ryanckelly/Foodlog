@@ -186,3 +186,76 @@ def test_range_summary():
     assert result.total_calories == 247.5
     assert result.days == 1
     assert result.avg_daily_calories == 247.5
+
+
+# --- Search Service Tests ---
+
+import pytest
+
+from foodlog.models.schemas import FoodSearchResult
+from foodlog.services.search import SearchService
+
+
+class FakeFatSecretClient:
+    def __init__(self, results: list[FoodSearchResult]):
+        self._results = results
+
+    async def search(self, query: str, max_results: int = 10):
+        return self._results
+
+
+class FakeUSDAClient:
+    def __init__(self, results: list[FoodSearchResult]):
+        self._results = results
+
+    async def search(self, query: str, page_size: int = 10):
+        return self._results
+
+
+def make_result(name, source, food_id="1"):
+    return FoodSearchResult(
+        food_id=food_id,
+        food_name=name,
+        source=source,
+        calories=100.0,
+        protein_g=10.0,
+        carbs_g=20.0,
+        fat_g=5.0,
+        serving_description="Per 100g",
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_fatsecret_primary():
+    fs = FakeFatSecretClient([make_result("Chicken", "fatsecret")])
+    usda = FakeUSDAClient([make_result("Chicken", "usda")])
+    svc = SearchService(fatsecret=fs, usda=usda)
+    results = await svc.search("chicken")
+    assert len(results) == 1
+    assert results[0].source == "fatsecret"
+
+
+@pytest.mark.asyncio
+async def test_search_fallback_to_usda():
+    fs = FakeFatSecretClient([])
+    usda = FakeUSDAClient([make_result("Chicken", "usda")])
+    svc = SearchService(fatsecret=fs, usda=usda)
+    results = await svc.search("chicken")
+    assert len(results) == 1
+    assert results[0].source == "usda"
+
+
+@pytest.mark.asyncio
+async def test_search_no_fatsecret():
+    usda = FakeUSDAClient([make_result("Chicken", "usda")])
+    svc = SearchService(fatsecret=None, usda=usda)
+    results = await svc.search("chicken")
+    assert len(results) == 1
+    assert results[0].source == "usda"
+
+
+@pytest.mark.asyncio
+async def test_search_no_clients():
+    svc = SearchService(fatsecret=None, usda=None)
+    with pytest.raises(RuntimeError, match="No food database APIs configured"):
+        await svc.search("chicken")
