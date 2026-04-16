@@ -1,0 +1,53 @@
+# FoodLog with Tailscale sidecar
+# Provides secure remote access via Tailscale network only.
+# Pattern matches /opt/ollama/docker-compose.yml.
+
+services:
+  foodlog:
+    build: .
+    container_name: foodlog
+    network_mode: service:tailscale  # Share Tailscale's network namespace
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - FATSECRET_CONSUMER_KEY=${FATSECRET_CONSUMER_KEY}
+      - FATSECRET_CONSUMER_SECRET=${FATSECRET_CONSUMER_SECRET}
+      - USDA_API_KEY=${USDA_API_KEY}
+      - FOODLOG_DB_PATH=/data/foodlog.db
+      - FOODLOG_HOST=0.0.0.0
+      - FOODLOG_PORT=3474  # Internal port; Tailscale forwards 3473 -> 3474
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    depends_on:
+      tailscale:
+        condition: service_healthy
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: foodlog-tailscale
+    hostname: ${TS_HOSTNAME:-foodlog}
+    ports:
+      - "3473:3474"  # Local host access to foodlog API
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=false
+    volumes:
+      - ./tailscale-state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    cap_add:
+      # Required for creating tunnel interface
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
