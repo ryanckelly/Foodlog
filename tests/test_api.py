@@ -212,3 +212,44 @@ def test_range_summary(client):
     assert data["total_calories"] == 587.5
     assert data["days"] == 1
     assert data["avg_daily_calories"] == 587.5
+
+
+# --- Foods Router Tests ---
+
+from unittest.mock import AsyncMock, patch
+
+from foodlog.models.schemas import FoodSearchResult
+
+
+def test_search_foods(client):
+    mock_results = [
+        FoodSearchResult(
+            food_id="33691",
+            food_name="Chicken Breast",
+            source="fatsecret",
+            calories=165.0,
+            protein_g=31.0,
+            carbs_g=0.0,
+            fat_g=3.6,
+            serving_description="Per 100g",
+        )
+    ]
+
+    with patch(
+        "foodlog.api.routers.foods.get_search_service"
+    ) as mock_get_svc:
+        mock_svc = AsyncMock()
+        mock_svc.search.return_value = mock_results
+        mock_get_svc.return_value = mock_svc
+
+        resp = client.get("/foods/search", params={"q": "chicken"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["food_name"] == "Chicken Breast"
+
+
+def test_search_foods_missing_query(client):
+    resp = client.get("/foods/search")
+    assert resp.status_code == 422
