@@ -10,7 +10,7 @@ from foodlog.db.models import (
 
 
 def test_oauth_models_persist(db_session):
-    now = datetime.datetime.now(datetime.UTC)
+    now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     client = OAuthClient(
         client_id="client_123",
         redirect_uris_json='["https://claude.ai/api/mcp/auth_callback"]',
@@ -60,7 +60,15 @@ def test_oauth_models_persist(db_session):
     db_session.commit()
 
     assert db_session.get(OAuthClient, "client_123").client_name == "Claude"
-    assert db_session.get(OAuthPendingAuthorization, "req_123").client_id == "client_123"
-    assert db_session.get(OAuthAuthorizationCode, "code_hash").resource == "https://foodlog.example.com/mcp"
+
+    fetched_pending = db_session.get(OAuthPendingAuthorization, "req_123")
+    fetched_code = db_session.get(OAuthAuthorizationCode, "code_hash")
+
+    assert fetched_pending.client_id == "client_123"
+    assert fetched_pending.expires_at.tzinfo is None
+    assert fetched_pending.expires_at > now
+    assert fetched_code.resource == "https://foodlog.example.com/mcp"
+    assert fetched_code.expires_at.tzinfo is None
+    assert fetched_code.expires_at > now
     assert db_session.get(OAuthAccessToken, "access_hash").client_id == "client_123"
     assert db_session.get(OAuthRefreshToken, "refresh_hash").client_id == "client_123"
