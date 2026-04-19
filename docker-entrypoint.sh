@@ -2,9 +2,9 @@
 set -euo pipefail
 
 required_vars=(
-  CLOUDFLARE_TUNNEL_TOKEN
   FOODLOG_PUBLIC_BASE_URL
   FOODLOG_OAUTH_LOGIN_SECRET
+  TUNNEL_TOKEN
 )
 
 for var_name in "${required_vars[@]}"; do
