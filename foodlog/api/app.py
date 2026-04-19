@@ -29,6 +29,10 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="FoodLog", version="0.1.0", lifespan=lifespan)
 
+    from foodlog.api.auth import OAuthResourceMiddleware
+
+    app.add_middleware(OAuthResourceMiddleware)
+
     @app.get("/health")
     def health():
         return {

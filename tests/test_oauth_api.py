@@ -71,6 +71,19 @@ def test_healthz_is_public(client):
     assert resp.json() == {"status": "ok"}
 
 
+def test_rest_routes_require_oauth(raw_client):
+    resp = raw_client.get("/entries")
+
+    assert resp.status_code == 401
+    assert resp.headers["www-authenticate"].startswith("Bearer")
+
+
+def test_health_requires_oauth(raw_client):
+    resp = raw_client.get("/health")
+
+    assert resp.status_code == 401
+
+
 @pytest.mark.asyncio
 async def test_oauth_consent_flow_issues_code(client, db_session, monkeypatch):
     _configure_oauth_test_settings(monkeypatch, db_session)

@@ -32,6 +32,12 @@ def get_session_factory_cached():
     return _session_factory
 
 
+def reset_session_factory_for_tests(session_factory):
+    """Test-only hook so auth middleware and MCP tools use the in-memory DB."""
+    global _session_factory
+    _session_factory = session_factory
+
+
 def get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None:

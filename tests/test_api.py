@@ -11,6 +11,12 @@ def test_health(client):
     assert "usda" in data
 
 
+def test_healthz_public(raw_client):
+    resp = raw_client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
 def test_create_entry(client):
     resp = client.post(
         "/entries",
