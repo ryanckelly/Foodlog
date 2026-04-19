@@ -114,15 +114,32 @@ def _loopback_callbacks_match(registered_uri: str, requested_uri: str) -> bool:
         return False
 
 
-def _requested_scopes(scopes: list[str] | None) -> list[str]:
-    return scopes or list(FOODLOG_SCOPES)
+def _client_registered_scopes(client: OAuthClientInformationFull) -> list[str]:
+    return client.scope.split() if client.scope else list(FOODLOG_SCOPES)
 
 
-def _validate_scopes_for_authorize(scopes: list[str]) -> None:
+def _requested_scopes(
+    scopes: list[str] | None, client: OAuthClientInformationFull
+) -> list[str]:
+    if scopes is None:
+        return _client_registered_scopes(client)
+    return scopes
+
+
+def _validate_scopes_for_authorize(
+    scopes: list[str], client: OAuthClientInformationFull
+) -> None:
     invalid = [scope for scope in scopes if scope not in FOODLOG_SCOPES]
     if invalid:
         raise AuthorizeError(
             "invalid_scope", f"Unsupported scopes: {' '.join(invalid)}"
+        )
+    registered_scopes = _client_registered_scopes(client)
+    exceeded = [scope for scope in scopes if scope not in registered_scopes]
+    if exceeded:
+        raise AuthorizeError(
+            "invalid_scope",
+            f"Scopes exceed client registration: {' '.join(exceeded)}",
         )
 
 
@@ -256,8 +273,8 @@ class FoodLogOAuthProvider(
         if not _redirect_uri_allowed(redirect_uri):
             raise AuthorizeError("invalid_request", "Unsupported redirect URI")
 
-        scopes = _requested_scopes(params.scopes)
-        _validate_scopes_for_authorize(scopes)
+        scopes = _requested_scopes(params.scopes, client)
+        _validate_scopes_for_authorize(scopes, client)
         resource = _validate_resource_for_authorize(params.resource)
         request_id = _new_secret("authreq")
 

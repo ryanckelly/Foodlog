@@ -18,7 +18,7 @@ from foodlog.services.oauth import (
     hash_token,
     login_secret_matches,
 )
-from mcp.server.auth.provider import AuthorizationParams
+from mcp.server.auth.provider import AuthorizationParams, AuthorizeError
 from mcp.shared.auth import InvalidRedirectUriError, OAuthClientInformationFull
 from pydantic import AnyUrl
 
@@ -119,6 +119,19 @@ def _client_with_redirect(client_id: str, redirect_uri: str) -> OAuthClientInfor
     )
 
 
+def _read_only_client() -> OAuthClientInformationFull:
+    return OAuthClientInformationFull(
+        client_id="read_only_client",
+        redirect_uris=[AnyUrl("https://claude.ai/api/mcp/auth_callback")],
+        token_endpoint_auth_method="none",
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        scope="foodlog.read",
+        client_name="Claude",
+        client_id_issued_at=1_700_000_000,
+    )
+
+
 @pytest.mark.asyncio
 async def test_register_and_load_client(db_session, monkeypatch):
     monkeypatch.setattr("foodlog.config.settings.foodlog_public_base_url", "https://foodlog.example.com")
@@ -187,6 +200,51 @@ async def test_authorize_creates_pending_consent_request(db_session, monkeypatch
     assert pending is not None
     assert pending.client_id == "client_test"
     assert json.loads(pending.scopes_json) == ["foodlog.read"]
+
+
+@pytest.mark.asyncio
+async def test_authorize_defaults_to_registered_client_scopes(db_session, monkeypatch):
+    monkeypatch.setattr("foodlog.config.settings.foodlog_public_base_url", "https://foodlog.example.com")
+    provider = FoodLogOAuthProvider(lambda: db_session)
+    await provider.register_client(_read_only_client())
+    client = await provider.get_client("read_only_client")
+
+    redirect_url = await provider.authorize(
+        client,
+        AuthorizationParams(
+            state="abc",
+            scopes=None,
+            code_challenge=_pkce_challenge("verifier"),
+            redirect_uri=AnyUrl("https://claude.ai/api/mcp/auth_callback"),
+            redirect_uri_provided_explicitly=True,
+            resource="https://foodlog.example.com/mcp",
+        ),
+    )
+
+    pending = provider.get_pending_authorization(redirect_url.rsplit("=", 1)[1])
+    assert pending is not None
+    assert json.loads(pending.scopes_json) == ["foodlog.read"]
+
+
+@pytest.mark.asyncio
+async def test_authorize_rejects_scopes_exceeding_client_registration(db_session, monkeypatch):
+    monkeypatch.setattr("foodlog.config.settings.foodlog_public_base_url", "https://foodlog.example.com")
+    provider = FoodLogOAuthProvider(lambda: db_session)
+    await provider.register_client(_read_only_client())
+    client = await provider.get_client("read_only_client")
+
+    with pytest.raises(AuthorizeError):
+        await provider.authorize(
+            client,
+            AuthorizationParams(
+                state="abc",
+                scopes=["foodlog.write"],
+                code_challenge=_pkce_challenge("verifier"),
+                redirect_uri=AnyUrl("https://claude.ai/api/mcp/auth_callback"),
+                redirect_uri_provided_explicitly=True,
+                resource="https://foodlog.example.com/mcp",
+            ),
+        )
 
 
 @pytest.mark.asyncio
