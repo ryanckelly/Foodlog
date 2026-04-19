@@ -198,9 +198,17 @@ class FoodLogOAuthProvider(
             raise RegistrationError("invalid_redirect_uri", "Unsupported redirect URI")
 
         token_endpoint_auth_method = client_info.token_endpoint_auth_method or "none"
-        if token_endpoint_auth_method != "none":
+        if token_endpoint_auth_method not in {
+            "none",
+            "client_secret_post",
+            "client_secret_basic",
+        }:
             raise RegistrationError(
-                "invalid_client_metadata", "Only public PKCE clients are supported"
+                "invalid_client_metadata", "Unsupported token endpoint auth method"
+            )
+        if token_endpoint_auth_method != "none" and not client_info.client_secret:
+            raise RegistrationError(
+                "invalid_client_metadata", "Client secret is required"
             )
 
         if client_info.scope:
@@ -235,7 +243,7 @@ class FoodLogOAuthProvider(
             session.merge(
                 OAuthClient(
                     client_id=client_id,
-                    client_secret=None,
+                    client_secret=client_info.client_secret,
                     redirect_uris_json=_json_list(redirect_uris),
                     grant_types_json=_json_list(grant_types),
                     response_types_json=_json_list(response_types),
@@ -258,7 +266,7 @@ class FoodLogOAuthProvider(
                     software_version=client_info.software_version,
                     token_endpoint_auth_method=token_endpoint_auth_method,
                     client_id_issued_at=issued_at,
-                    client_secret_expires_at=None,
+                    client_secret_expires_at=client_info.client_secret_expires_at,
                 )
             )
             session.commit()

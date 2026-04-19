@@ -195,6 +195,25 @@ def test_dynamic_registration_and_authorize_redirect(raw_client):
     assert "request_id=" in location
 
 
+def test_dynamic_registration_accepts_default_confidential_client(raw_client):
+    register_resp = raw_client.post(
+        "/register",
+        json={
+            "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "scope": "foodlog.read foodlog.write",
+            "client_name": "Claude",
+        },
+    )
+
+    assert register_resp.status_code == 201
+    data = register_resp.json()
+    assert data["token_endpoint_auth_method"] == "client_secret_post"
+    assert data["client_secret"]
+    assert data["client_id"]
+
+
 def test_mcp_without_token_returns_oauth_challenge(raw_client):
     resp = raw_client.post(
         "/mcp",
