@@ -1,13 +1,20 @@
 import datetime
 
+from mcp.server.auth.settings import (
+    AuthSettings,
+    ClientRegistrationOptions,
+    RevocationOptions,
+)
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import AnyHttpUrl
 
 from foodlog.api.dependencies import (
     get_fatsecret_client,
     get_session_factory_cached,
     get_usda_client,
 )
+from foodlog.config import settings
 from foodlog.models.schemas import (
     FoodEntryCreate,
     FoodEntryResponse,
@@ -19,7 +26,7 @@ from foodlog.services.search import SearchService
 
 
 def _default_transport_security() -> TransportSecuritySettings:
-    """Allow localhost and Tailscale MagicDNS hostnames."""
+    """Allow local, test, and public Cloudflare host headers."""
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[
@@ -28,25 +35,56 @@ def _default_transport_security() -> TransportSecuritySettings:
             "[::1]:*",
             "foodlog",
             "foodlog:*",
-            "foodlog.tailf67313.ts.net",
-            "foodlog.tailf67313.ts.net:*",
+            "foodlog.ryanckelly.ca",
+            "foodlog.ryanckelly.ca:*",
+            "foodlog.example.com",
+            "foodlog.example.com:*",
             "testserver",  # for pytest TestClient
         ],
         allowed_origins=[
             "http://127.0.0.1:*",
             "http://localhost:*",
             "http://[::1]:*",
-            "https://foodlog.tailf67313.ts.net:*",
+            "https://foodlog.ryanckelly.ca",
+            "https://foodlog.ryanckelly.ca:*",
+            "https://foodlog.example.com",
+            "https://foodlog.example.com:*",
         ],
     )
 
 
-def create_mcp_server() -> FastMCP:
+def _auth_settings() -> AuthSettings:
+    return AuthSettings(
+        issuer_url=AnyHttpUrl(settings.public_base_url),
+        resource_server_url=AnyHttpUrl(settings.public_mcp_resource_url),
+        client_registration_options=ClientRegistrationOptions(
+            enabled=True,
+            valid_scopes=["foodlog.read", "foodlog.write"],
+            default_scopes=["foodlog.read", "foodlog.write"],
+        ),
+        revocation_options=RevocationOptions(enabled=True),
+        required_scopes=["foodlog.read"],
+    )
+
+
+def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP:
     """Create the MCP server with tools that call services directly.
 
-    Uses streamable_http_path='/' so when mounted at /mcp on FastAPI,
-    the endpoint URL is /mcp (not /mcp/mcp).
+    Uses streamable_http_path='/mcp' so its routes can be composed at the
+    FastAPI root alongside OAuth discovery endpoints.
     """
+    auth_settings = None
+    auth_kwargs = {}
+    if auth_server_provider is not None or token_verifier is not None:
+        auth_settings = _auth_settings()
+        # FastMCP currently supports either authorization-server provider OR
+        # resource-server verifier in one instance. FoodLog exposes auth-server
+        # routes from FastAPI and uses FastMCP for protected /mcp resource routes.
+        if token_verifier is not None:
+            auth_kwargs["token_verifier"] = token_verifier
+        else:
+            auth_kwargs["auth_server_provider"] = auth_server_provider
+
     mcp = FastMCP(
         "FoodLog",
         instructions=(
@@ -54,7 +92,9 @@ def create_mcp_server() -> FastMCP:
             "then log_food to record meals. Use get_daily_summary to show totals. "
             "Always search before logging to get accurate nutrition values."
         ),
-        streamable_http_path="/",
+        streamable_http_path="/mcp",
+        auth=auth_settings,
+        **auth_kwargs,
         transport_security=_default_transport_security(),
     )
 

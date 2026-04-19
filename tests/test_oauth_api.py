@@ -138,6 +138,74 @@ def test_rest_write_routes_require_write_scope(raw_client, db_session):
     assert resp.status_code == 403
 
 
+def test_protected_resource_metadata(raw_client):
+    resp = raw_client.get("/.well-known/oauth-protected-resource/mcp")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["resource"] == "https://foodlog.example.com/mcp"
+    assert data["authorization_servers"] == ["https://foodlog.example.com/"]
+    assert "foodlog.read" in data["scopes_supported"]
+
+
+def test_authorization_server_metadata(raw_client):
+    resp = raw_client.get("/.well-known/oauth-authorization-server")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["issuer"] == "https://foodlog.example.com/"
+    assert data["authorization_endpoint"] == "https://foodlog.example.com/authorize"
+    assert data["token_endpoint"] == "https://foodlog.example.com/token"
+    assert data["registration_endpoint"] == "https://foodlog.example.com/register"
+
+
+def test_dynamic_registration_and_authorize_redirect(raw_client):
+    register_resp = raw_client.post(
+        "/register",
+        json={
+            "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+            "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "scope": "foodlog.read foodlog.write",
+            "client_name": "Claude",
+        },
+    )
+    assert register_resp.status_code == 201
+    client_id = register_resp.json()["client_id"]
+
+    authorize_resp = raw_client.get(
+        "/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": "https://claude.ai/api/mcp/auth_callback",
+            "scope": "foodlog.read foodlog.write",
+            "state": "state-123",
+            "code_challenge": _pkce_challenge("verifier"),
+            "code_challenge_method": "S256",
+            "resource": "https://foodlog.example.com/mcp",
+        },
+        follow_redirects=False,
+    )
+
+    assert authorize_resp.status_code == 302
+    location = authorize_resp.headers["location"]
+    assert location.startswith("https://foodlog.example.com/oauth/consent")
+    assert "request_id=" in location
+
+
+def test_mcp_without_token_returns_oauth_challenge(raw_client):
+    resp = raw_client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        headers={"Accept": "application/json, text/event-stream"},
+    )
+
+    assert resp.status_code == 401
+    assert "resource_metadata" in resp.headers["www-authenticate"]
+
+
 @pytest.mark.asyncio
 async def test_oauth_consent_flow_issues_code(client, db_session, monkeypatch):
     _configure_oauth_test_settings(monkeypatch, db_session)

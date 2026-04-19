@@ -1,19 +1,30 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from mcp.server.auth.routes import create_auth_routes
+from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+from pydantic import AnyHttpUrl
 
-from foodlog.api.dependencies import cleanup_http_client
+from foodlog.api.dependencies import cleanup_http_client, get_session_factory_cached
 from foodlog.config import settings
 from foodlog.db.database import get_engine
 from foodlog.db.models import Base
+from foodlog.services.oauth import FOODLOG_SCOPES, FoodLogOAuthProvider, FoodLogTokenVerifier
 from mcp_server.server import create_mcp_server
 
 
 def create_app() -> FastAPI:
+    session_factory = get_session_factory_cached()
+    oauth_provider = FoodLogOAuthProvider(session_factory)
+    token_verifier = FoodLogTokenVerifier(session_factory)
+
     # Create the MCP server once per app instance so its session_manager is a
     # singleton scoped to this app (allows test isolation: each create_app()
     # call gets a fresh StreamableHTTPSessionManager that can be run() once).
-    mcp = create_mcp_server()
+    mcp = create_mcp_server(
+        auth_server_provider=oauth_provider,
+        token_verifier=token_verifier,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -51,9 +62,23 @@ def create_app() -> FastAPI:
     app.include_router(summary_router)
     app.include_router(foods_router)
 
-    # Mount MCP at /mcp (the inner Starlette app's route is "/" due to
-    # streamable_http_path="/" in create_mcp_server).
-    app.mount("/mcp", mcp.streamable_http_app())
+    app.router.routes.extend(
+        create_auth_routes(
+            provider=oauth_provider,
+            issuer_url=AnyHttpUrl(settings.public_base_url),
+            client_registration_options=ClientRegistrationOptions(
+                enabled=True,
+                valid_scopes=list(FOODLOG_SCOPES),
+                default_scopes=list(FOODLOG_SCOPES),
+            ),
+            revocation_options=RevocationOptions(enabled=True),
+        )
+    )
+
+    mcp_app = mcp.streamable_http_app()
+    for middleware in reversed(mcp_app.user_middleware):
+        app.add_middleware(middleware.cls, *middleware.args, **middleware.kwargs)
+    app.router.routes.extend(mcp_app.routes)
 
     return app
 
