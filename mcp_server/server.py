@@ -1,5 +1,6 @@
 import datetime
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import (
     AuthSettings,
     ClientRegistrationOptions,
@@ -23,6 +24,23 @@ from foodlog.models.schemas import (
 from foodlog.services.logging import EntryService
 from foodlog.services.nutrition import SummaryService
 from foodlog.services.search import SearchService
+
+TOOL_REQUIRED_SCOPES = {
+    "search_food": ["foodlog.read"],
+    "get_entries": ["foodlog.read"],
+    "get_daily_summary": ["foodlog.read"],
+    "log_food": ["foodlog.write"],
+    "edit_entry": ["foodlog.write"],
+    "delete_entry": ["foodlog.write"],
+}
+
+
+def _require_scope(scope: str) -> None:
+    access_token = get_access_token()
+    if access_token is None:
+        return
+    if scope not in access_token.scopes:
+        raise PermissionError(f"Missing required scope: {scope}")
 
 
 def _default_transport_security() -> TransportSecuritySettings:
@@ -108,6 +126,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         Args:
             query: Food name to search for (e.g. "chicken breast", "oat milk latte")
         """
+        _require_scope("foodlog.read")
         svc = SearchService(
             fatsecret=get_fatsecret_client(),
             usda=get_usda_client(),
@@ -128,6 +147,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                 unit, calories, protein_g, carbs_g, fat_g, source, raw_input.
                 Optional: weight_g, source_id, fiber_g, sugar_g, sodium_mg.
         """
+        _require_scope("foodlog.write")
         session_factory = get_session_factory_cached()
         models = [FoodEntryCreate.model_validate(e) for e in entries]
         with session_factory() as session:
@@ -150,6 +170,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             date: Date in YYYY-MM-DD format (default: today)
             meal_type: Filter by meal type (breakfast/lunch/dinner/snack)
         """
+        _require_scope("foodlog.read")
         target_date = (
             datetime.date.fromisoformat(date) if date else datetime.date.today()
         )
@@ -172,6 +193,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             entry_id: ID of the entry to update
             updates: Fields to update (e.g. {"quantity": 2.0, "calories": 495.0})
         """
+        _require_scope("foodlog.write")
         session_factory = get_session_factory_cached()
         with session_factory() as session:
             svc = EntryService(session)
@@ -188,6 +210,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         Args:
             entry_id: ID of the entry to delete
         """
+        _require_scope("foodlog.write")
         session_factory = get_session_factory_cached()
         with session_factory() as session:
             svc = EntryService(session)
@@ -204,6 +227,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         Args:
             date: Date in YYYY-MM-DD format (default: today)
         """
+        _require_scope("foodlog.read")
         target_date = (
             datetime.date.fromisoformat(date) if date else datetime.date.today()
         )
