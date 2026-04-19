@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from foodlog.config import Settings
+from foodlog.db import database
 from foodlog.db.models import Base, FoodEntry
 
 
@@ -78,3 +79,16 @@ def test_public_mcp_resource_url_strips_trailing_slash():
     settings = Settings(foodlog_public_base_url="https://foodlog.example.com/")
     assert settings.public_base_url == "https://foodlog.example.com"
     assert settings.public_mcp_resource_url == "https://foodlog.example.com/mcp"
+
+
+def test_get_engine_configures_driver_qualified_sqlite_url(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_configure_sqlite(engine):
+        called["engine"] = engine
+
+    monkeypatch.setattr(database, "_configure_sqlite", fake_configure_sqlite)
+
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'foodlog.db'}")
+
+    assert called["engine"] is engine

@@ -18,12 +18,17 @@ def _configure_sqlite(engine: Engine) -> None:
         cursor.close()
 
 
+def _is_sqlite_url(url: str) -> bool:
+    return url.startswith("sqlite:///") or url.startswith("sqlite+")
+
+
 def get_engine(db_url: str | None = None):
     url = db_url or settings.database_url
-    db_path = url.replace("sqlite:///", "")
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    if _is_sqlite_url(url):
+        db_path = url.split("///", 1)[1]
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(url, echo=False)
-    if url.startswith("sqlite:///"):
+    if _is_sqlite_url(url):
         _configure_sqlite(engine)
     return engine
 
