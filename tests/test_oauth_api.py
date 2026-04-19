@@ -1,8 +1,11 @@
 import base64
+import datetime
 import hashlib
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from foodlog.services.oauth import FOODLOG_SCOPES, FoodLogOAuthProvider
+from foodlog.db.models import OAuthPendingAuthorization
+from foodlog.services.oauth import FOODLOG_SCOPES, FoodLogOAuthProvider, utcnow
 from mcp.server.auth.provider import AuthorizationParams
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
@@ -45,6 +48,22 @@ async def _create_pending_authorization(
     return redirect_url.rsplit("=", 1)[1]
 
 
+def _configure_oauth_test_settings(monkeypatch, db_session) -> None:
+    monkeypatch.setattr(
+        "foodlog.config.settings.foodlog_public_base_url",
+        "https://foodlog.example.com",
+    )
+    monkeypatch.setattr("foodlog.config.settings.foodlog_oauth_login_secret", "secret")
+    monkeypatch.setattr("foodlog.api.dependencies._session_factory", lambda: db_session)
+
+
+def _expire_pending_authorization(db_session, request_id: str) -> None:
+    pending = db_session.get(OAuthPendingAuthorization, request_id)
+    assert pending is not None
+    pending.expires_at = utcnow() - datetime.timedelta(seconds=1)
+    db_session.commit()
+
+
 def test_healthz_is_public(client):
     resp = client.get("/healthz", headers={})
 
@@ -54,12 +73,7 @@ def test_healthz_is_public(client):
 
 @pytest.mark.asyncio
 async def test_oauth_consent_flow_issues_code(client, db_session, monkeypatch):
-    monkeypatch.setattr(
-        "foodlog.config.settings.foodlog_public_base_url",
-        "https://foodlog.example.com",
-    )
-    monkeypatch.setattr("foodlog.config.settings.foodlog_oauth_login_secret", "secret")
-    monkeypatch.setattr("foodlog.api.dependencies._session_factory", lambda: db_session)
+    _configure_oauth_test_settings(monkeypatch, db_session)
 
     provider = FoodLogOAuthProvider(lambda: db_session)
     request_id = await _create_pending_authorization(
@@ -70,6 +84,8 @@ async def test_oauth_consent_flow_issues_code(client, db_session, monkeypatch):
 
     assert resp.status_code == 200
     assert "Authorize FoodLog" in resp.text
+    assert "foodlog.read" in resp.text
+    assert request_id in resp.text
 
     resp = client.post(
         "/oauth/consent",
@@ -89,7 +105,54 @@ async def test_oauth_consent_flow_issues_code(client, db_session, monkeypatch):
     )
 
     assert resp.status_code == 302
-    assert resp.headers["location"].startswith(
-        "https://claude.ai/api/mcp/auth_callback?code="
+    callback = urlsplit(resp.headers["location"])
+    callback_query = parse_qs(callback.query)
+    assert f"{callback.scheme}://{callback.netloc}{callback.path}" == (
+        "https://claude.ai/api/mcp/auth_callback"
     )
-    assert "state=state-123" in resp.headers["location"]
+    assert callback_query["code"]
+    assert callback_query["state"] == ["state-123"]
+
+
+def test_oauth_consent_missing_request_returns_404(client, db_session, monkeypatch):
+    _configure_oauth_test_settings(monkeypatch, db_session)
+
+    resp = client.get("/oauth/consent?request_id=missing")
+
+    assert resp.status_code == 404
+
+
+def test_oauth_consent_post_missing_request_id_returns_404(
+    client, db_session, monkeypatch
+):
+    _configure_oauth_test_settings(monkeypatch, db_session)
+
+    resp = client.post(
+        "/oauth/consent",
+        data={"login_secret": "secret"},
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_oauth_consent_expired_request_returns_404(
+    client, db_session, monkeypatch
+):
+    _configure_oauth_test_settings(monkeypatch, db_session)
+    provider = FoodLogOAuthProvider(lambda: db_session)
+    request_id = await _create_pending_authorization(
+        provider, "client_expired", "state-expired"
+    )
+    _expire_pending_authorization(db_session, request_id)
+
+    resp = client.get(f"/oauth/consent?request_id={request_id}")
+
+    assert resp.status_code == 404
+
+    resp = client.post(
+        "/oauth/consent",
+        data={"request_id": request_id, "login_secret": "secret"},
+    )
+
+    assert resp.status_code == 404
