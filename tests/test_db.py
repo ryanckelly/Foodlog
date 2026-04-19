@@ -2,6 +2,7 @@ import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from foodlog.config import Settings
 from foodlog.db.models import Base, FoodEntry
 
 
@@ -61,3 +62,19 @@ def test_nullable_fields():
         assert entry.fiber_g is None
         assert entry.sugar_g is None
         assert entry.sodium_mg is None
+
+
+def test_cloudflare_oauth_settings_defaults():
+    settings = Settings()
+    assert settings.cloudflare_tunnel_token == ""
+    assert settings.foodlog_public_base_url == ""
+    assert settings.foodlog_oauth_login_secret == ""
+    assert settings.oauth_authorization_code_ttl_seconds == 300
+    assert settings.oauth_access_token_ttl_seconds == 3600
+    assert settings.oauth_refresh_token_ttl_seconds == 90 * 24 * 60 * 60
+
+
+def test_public_mcp_resource_url_strips_trailing_slash():
+    settings = Settings(foodlog_public_base_url="https://foodlog.example.com/")
+    assert settings.public_base_url == "https://foodlog.example.com"
+    assert settings.public_mcp_resource_url == "https://foodlog.example.com/mcp"
