@@ -18,7 +18,11 @@ from mcp.server.auth.provider import (
     TokenError,
     TokenVerifier,
 )
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp.shared.auth import (
+    InvalidRedirectUriError,
+    OAuthClientInformationFull,
+    OAuthToken,
+)
 from pydantic import AnyHttpUrl, AnyUrl
 from sqlalchemy.orm import Session
 
@@ -89,6 +93,27 @@ def _redirect_uri_allowed(uri: str) -> bool:
         return False
 
 
+def _loopback_callbacks_match(registered_uri: str, requested_uri: str) -> bool:
+    registered = urlsplit(registered_uri)
+    requested = urlsplit(requested_uri)
+
+    if registered.scheme != "http" or requested.scheme != "http":
+        return False
+    if registered.hostname not in {"localhost", "127.0.0.1"}:
+        return False
+    if requested.hostname != registered.hostname:
+        return False
+    if registered.path != "/callback" or requested.path != registered.path:
+        return False
+    if registered.query != requested.query or registered.fragment != requested.fragment:
+        return False
+
+    try:
+        return registered.port is not None and requested.port is not None
+    except ValueError:
+        return False
+
+
 def _requested_scopes(scopes: list[str] | None) -> list[str]:
     return scopes or list(FOODLOG_SCOPES)
 
@@ -113,6 +138,26 @@ def _validate_resource_for_authorize(resource: str | None) -> str:
     if requested != expected:
         raise AuthorizeError("invalid_request", "Invalid resource")
     return requested
+
+
+class FoodLogOAuthClientInformationFull(OAuthClientInformationFull):
+    def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
+        if redirect_uri is None:
+            return super().validate_redirect_uri(redirect_uri)
+        if self.redirect_uris is None:
+            raise InvalidRedirectUriError(
+                f"Redirect URI '{redirect_uri}' not registered for client"
+            )
+        if redirect_uri in self.redirect_uris:
+            return redirect_uri
+        if any(
+            _loopback_callbacks_match(str(registered_uri), str(redirect_uri))
+            for registered_uri in self.redirect_uris
+        ):
+            return redirect_uri
+        raise InvalidRedirectUriError(
+            f"Redirect URI '{redirect_uri}' not registered for client"
+        )
 
 
 class FoodLogOAuthProvider(
@@ -420,6 +465,12 @@ class FoodLogOAuthProvider(
 
             if refresh is not None:
                 refresh.revoked_at = revoked_at
+                for paired_access in (
+                    session.query(OAuthAccessToken)
+                    .filter(OAuthAccessToken.refresh_token_hash == token_hash)
+                    .all()
+                ):
+                    paired_access.revoked_at = revoked_at
 
             session.commit()
 
@@ -456,7 +507,7 @@ class FoodLogOAuthProvider(
         return access_token, refresh_token
 
     def _client_from_row(self, row: OAuthClient) -> OAuthClientInformationFull:
-        return OAuthClientInformationFull(
+        return FoodLogOAuthClientInformationFull(
             client_id=row.client_id,
             client_secret=row.client_secret,
             redirect_uris=[
@@ -504,4 +555,7 @@ class FoodLogTokenVerifier(TokenVerifier):
 
 
 def login_secret_matches(candidate: str) -> bool:
-    return hmac.compare_digest(candidate, settings.foodlog_oauth_login_secret)
+    secret = settings.foodlog_oauth_login_secret
+    if not secret:
+        return False
+    return hmac.compare_digest(candidate, secret)
