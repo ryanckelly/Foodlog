@@ -66,7 +66,7 @@ def test_nullable_fields():
 
 
 def test_cloudflare_oauth_settings_defaults():
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert settings.cloudflare_tunnel_token == ""
     assert settings.foodlog_public_base_url == ""
     assert settings.foodlog_oauth_login_secret == ""
@@ -76,7 +76,7 @@ def test_cloudflare_oauth_settings_defaults():
 
 
 def test_public_mcp_resource_url_strips_trailing_slash():
-    settings = Settings(foodlog_public_base_url="https://foodlog.example.com/")
+    settings = Settings(_env_file=None, foodlog_public_base_url="https://foodlog.example.com/")
     assert settings.public_base_url == "https://foodlog.example.com"
     assert settings.public_mcp_resource_url == "https://foodlog.example.com/mcp"
 
