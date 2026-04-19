@@ -1,11 +1,18 @@
 import base64
 import datetime
 import hashlib
+import json
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from foodlog.db.models import OAuthPendingAuthorization
-from foodlog.services.oauth import FOODLOG_SCOPES, FoodLogOAuthProvider, utcnow
+from foodlog.config import settings
+from foodlog.db.models import OAuthAccessToken, OAuthPendingAuthorization
+from foodlog.services.oauth import (
+    FOODLOG_SCOPES,
+    FoodLogOAuthProvider,
+    hash_token,
+    utcnow,
+)
 from mcp.server.auth.provider import AuthorizationParams
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
@@ -64,6 +71,19 @@ def _expire_pending_authorization(db_session, request_id: str) -> None:
     db_session.commit()
 
 
+def _add_access_token(db_session, token: str, scopes: list[str]) -> None:
+    db_session.add(
+        OAuthAccessToken(
+            token_hash=hash_token(token),
+            client_id=f"client-{token}",
+            scopes_json=json.dumps(scopes),
+            resource=settings.public_mcp_resource_url,
+            expires_at=int(datetime.datetime.now(datetime.UTC).timestamp()) + 3600,
+        )
+    )
+    db_session.commit()
+
+
 def test_healthz_is_public(client):
     resp = client.get("/healthz", headers={})
 
@@ -82,6 +102,40 @@ def test_health_requires_oauth(raw_client):
     resp = raw_client.get("/health")
 
     assert resp.status_code == 401
+
+
+def test_rest_routes_reject_wrong_token(raw_client):
+    resp = raw_client.get(
+        "/entries", headers={"Authorization": "Bearer definitely-wrong"}
+    )
+
+    assert resp.status_code == 401
+
+
+def test_rest_write_routes_require_write_scope(raw_client, db_session):
+    token = "read-only-token"
+    _add_access_token(db_session, token, ["foodlog.read"])
+
+    resp = raw_client.post(
+        "/entries",
+        headers={"Authorization": f"Bearer {token}"},
+        json=[
+            {
+                "meal_type": "lunch",
+                "food_name": "Chicken",
+                "quantity": 1.0,
+                "unit": "serving",
+                "calories": 247.5,
+                "protein_g": 46.5,
+                "carbs_g": 0.0,
+                "fat_g": 5.4,
+                "source": "fatsecret",
+                "raw_input": "chicken",
+            }
+        ],
+    )
+
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
