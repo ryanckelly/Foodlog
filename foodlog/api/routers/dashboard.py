@@ -42,11 +42,45 @@ def feed_partial(
         entries = entry_svc.get_by_range(start_date, end_date)
         summary = summary_svc.range(start_date, end_date)
         
+    entries.sort(key=lambda x: x.logged_at, reverse=True)
+    
+    grouped_entries = []
+    if entries:
+        current_group = {
+            "meal_type": entries[0].meal_type,
+            "logged_at": entries[0].logged_at,
+            "items": [entries[0]],
+            "total_calories": entries[0].calories,
+            "total_protein_g": entries[0].protein_g,
+            "total_carbs_g": entries[0].carbs_g,
+            "total_fat_g": entries[0].fat_g,
+        }
+        for entry in entries[1:]:
+            time_diff = abs((entry.logged_at - current_group["logged_at"]).total_seconds())
+            if entry.meal_type == current_group["meal_type"] and time_diff < 300:
+                current_group["items"].append(entry)
+                current_group["total_calories"] += entry.calories
+                current_group["total_protein_g"] += entry.protein_g
+                current_group["total_carbs_g"] += entry.carbs_g
+                current_group["total_fat_g"] += entry.fat_g
+            else:
+                grouped_entries.append(current_group)
+                current_group = {
+                    "meal_type": entry.meal_type,
+                    "logged_at": entry.logged_at,
+                    "items": [entry],
+                    "total_calories": entry.calories,
+                    "total_protein_g": entry.protein_g,
+                    "total_carbs_g": entry.carbs_g,
+                    "total_fat_g": entry.fat_g,
+                }
+        grouped_entries.append(current_group)
+        
     return templates.TemplateResponse(
         request=request,
         name="dashboard/feed_partial.html", 
         context={
-            "entries": entries, 
+            "grouped_entries": grouped_entries, 
             "summary": summary
         }
     )

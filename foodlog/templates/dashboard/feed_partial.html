@@ -4,20 +4,24 @@
             <header>
                 <strong>Timeline</strong>
             </header>
-            {% if entries %}
-                {% for entry in entries %}
+            {% if grouped_entries %}
+                {% for group in grouped_entries %}
                 <div style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span><strong>{{ entry.food_name }}</strong> ({{ entry.quantity }} {{ entry.unit }})</span>
-                        <span><strong>{{ entry.calories | round }} kcal</strong></span>
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span style="color: #64748b; font-size: 0.9em;">
+                            <strong>{{ group.meal_type | title }}</strong> - {{ group.logged_at.strftime('%I:%M %p') }}
+                        </span>
+                        <span><strong>{{ group.total_calories | round }} kcal</strong></span>
                     </div>
-                    <div style="color: #64748b; font-size: 0.9em;">
-                        {{ entry.logged_at.strftime('%I:%M %p') }} - {{ entry.meal_type | title }}
-                    </div>
+                    <ul style="margin: 10px 0; padding-left: 20px; font-size: 0.95em;">
+                        {% for entry in group.items %}
+                        <li>{{ entry.food_name }} ({{ entry.quantity }} {{ entry.unit }}) - {{ entry.calories | round }} kcal</li>
+                        {% endfor %}
+                    </ul>
                     <div style="margin-top: 5px;">
-                        <span class="macro-pill">P: {{ entry.protein_g | round }}g</span>
-                        <span class="macro-pill">C: {{ entry.carbs_g | round }}g</span>
-                        <span class="macro-pill">F: {{ entry.fat_g | round }}g</span>
+                        <span class="macro-pill">P: {{ group.total_protein_g | round }}g</span>
+                        <span class="macro-pill">C: {{ group.total_carbs_g | round }}g</span>
+                        <span class="macro-pill">F: {{ group.total_fat_g | round }}g</span>
                     </div>
                 </div>
                 {% endfor %}
