@@ -1,0 +1,42 @@
+<div class="grid">
+    <div>
+        <article>
+            <header>
+                <strong>Timeline</strong>
+            </header>
+            {% if entries %}
+                {% for entry in entries %}
+                <div style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span><strong>{{ entry.food_name }}</strong> ({{ entry.quantity }} {{ entry.unit }})</span>
+                        <span><strong>{{ entry.calories | round }} kcal</strong></span>
+                    </div>
+                    <div style="color: #64748b; font-size: 0.9em;">
+                        {{ entry.logged_at.strftime('%I:%M %p') }} - {{ entry.meal_type | title }}
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <span class="macro-pill">P: {{ entry.protein_g | round }}g</span>
+                        <span class="macro-pill">C: {{ entry.carbs_g | round }}g</span>
+                        <span class="macro-pill">F: {{ entry.fat_g | round }}g</span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No entries found for this period.</p>
+            {% endif %}
+        </article>
+    </div>
+    <div>
+        <article>
+            <header>
+                <strong>Summary</strong>
+            </header>
+            <ul>
+                <li>Total Calories: <strong>{{ summary.total_calories | round }}</strong></li>
+                <li>Protein: <strong>{{ summary.total_protein_g | round }}g</strong></li>
+                <li>Carbs: <strong>{{ summary.total_carbs_g | round }}g</strong></li>
+                <li>Fat: <strong>{{ summary.total_fat_g | round }}g</strong></li>
+            </ul>
+        </article>
+    </div>
+</div>
