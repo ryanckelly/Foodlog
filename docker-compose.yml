@@ -16,7 +16,7 @@ services:
       - FOODLOG_OAUTH_LOGIN_SECRET=${FOODLOG_OAUTH_LOGIN_SECRET}
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     ports:
-      - "127.0.0.1:3474:3474"
+      - "3474:3474"
     volumes:
       - ./data:/data
     healthcheck:
