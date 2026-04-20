@@ -85,6 +85,17 @@ def test_get_entries_by_date_and_meal():
     assert len(dinner) == 0
 
 
+def test_get_entries_by_range():
+    session = make_session()
+    svc = EntryService(session)
+    svc.create(sample_entry())
+    start_date = datetime.date.today() - datetime.timedelta(days=1)
+    end_date = datetime.date.today()
+    
+    entries = svc.get_by_range(start_date, end_date)
+    assert len(entries) > 0
+
+
 def test_update_entry():
     session = make_session()
     svc = EntryService(session)

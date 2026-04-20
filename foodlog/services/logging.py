@@ -73,6 +73,17 @@ class EntryService:
             query = query.filter(FoodEntry.meal_type == meal_type)
         return query.order_by(FoodEntry.logged_at).all()
 
+    def get_by_range(
+        self, start_date: datetime.date, end_date: datetime.date, meal_type: str | None = None
+    ) -> list[FoodEntry]:
+        query = self.session.query(FoodEntry).filter(
+            func.date(FoodEntry.logged_at) >= start_date,
+            func.date(FoodEntry.logged_at) <= end_date
+        )
+        if meal_type:
+            query = query.filter(FoodEntry.meal_type == meal_type)
+        return query.order_by(FoodEntry.logged_at.desc()).all()
+
     def update(self, entry_id: int, data: FoodEntryUpdate) -> FoodEntry | None:
         entry = self.session.get(FoodEntry, entry_id)
         if not entry:
