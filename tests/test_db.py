@@ -65,7 +65,10 @@ def test_nullable_fields():
         assert entry.sodium_mg is None
 
 
-def test_cloudflare_oauth_settings_defaults():
+def test_cloudflare_oauth_settings_defaults(monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_TUNNEL_TOKEN", raising=False)
+    monkeypatch.delenv("FOODLOG_PUBLIC_BASE_URL", raising=False)
+    monkeypatch.delenv("FOODLOG_OAUTH_LOGIN_SECRET", raising=False)
     settings = Settings(_env_file=None)
     assert settings.cloudflare_tunnel_token == ""
     assert settings.foodlog_public_base_url == ""
