@@ -28,6 +28,16 @@ def test_mcp_server_can_enable_oauth(db_session):
     assert str(mcp.settings.auth.resource_server_url) == "https://foodlog.example.com/mcp"
 
 
+def test_mcp_protected_resource_advertises_read_write_scopes(db_session):
+    mcp = create_mcp_server(
+        auth_server_provider=FoodLogOAuthProvider(lambda: db_session),
+        token_verifier=FoodLogTokenVerifier(lambda: db_session),
+    )
+
+    assert mcp.settings.auth is not None
+    assert mcp.settings.auth.required_scopes == ["foodlog.read", "foodlog.write"]
+
+
 def test_mcp_tool_scope_policy_is_declared():
     from mcp_server.server import TOOL_REQUIRED_SCOPES
 

@@ -81,7 +81,7 @@ def _auth_settings() -> AuthSettings:
             default_scopes=["foodlog.read", "foodlog.write"],
         ),
         revocation_options=RevocationOptions(enabled=True),
-        required_scopes=["foodlog.read"],
+        required_scopes=["foodlog.read", "foodlog.write"],
     )
 
 
