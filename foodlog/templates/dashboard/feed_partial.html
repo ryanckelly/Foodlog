@@ -6,7 +6,7 @@
             </header>
             {% if grouped_entries %}
                 {% for group in grouped_entries %}
-                <div style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
+                <div class="meal-{{ group.meal_type }}" style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
                         <span style="color: #64748b; font-size: 0.9em;">
                             <strong>{{ group.meal_type | title }}</strong> - {{ group.logged_at.strftime('%I:%M %p') }}
