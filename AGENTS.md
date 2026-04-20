@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Python 3.12 food logging service with a REST API and MCP endpoint. Application code lives in `foodlog/`: `api/` contains the FastAPI app, routers, and dependencies; `db/` contains SQLAlchemy setup and models; `models/` contains Pydantic schemas; `clients/` wraps external nutrition APIs; and `services/` holds business logic. The MCP integration is in `mcp_server/`. Tests mirror the main behavior in `tests/` with shared fixtures in `tests/conftest.py`. Deployment and operations files are at the root: `Dockerfile`, `docker-compose.yml`, `.env.example`, `serve.json`, and deployment notes under `doc/` and `docs/`.
+This repository is a Python 3.12 food logging service with a REST API and MCP endpoint. Application code lives in `foodlog/`: `api/` contains the FastAPI app, routers, OAuth consent routes, and dependencies; `db/` contains SQLAlchemy setup and models; `models/` contains Pydantic schemas; `clients/` wraps external nutrition APIs; and `services/` holds business logic including OAuth persistence. The MCP integration is in `mcp_server/`. Tests mirror the main behavior in `tests/` with shared fixtures in `tests/conftest.py`. Deployment and operations files are at the root: `Dockerfile`, `docker-compose.yml`, `.env.example`, `docker-entrypoint.sh`, and deployment notes under `doc/` and `docs/`.
 
 ## Build, Test, and Development Commands
 
@@ -14,7 +14,13 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Run the full test suite with `pytest`. Start the API locally with `python -m foodlog.api.app`; it reads host, port, database path, and API credentials from environment variables. For containerized deployment, use `docker compose up -d`, then verify with `curl http://localhost:3473/health` or `docker compose ps`. Rebuild the app container after code changes with `docker compose build foodlog`.
+Run the full test suite with `pytest`. Start the API locally with `python -m foodlog.api.app`; it reads host, port, database path, public base URL, OAuth secret, and API credentials from environment variables. For containerized deployment, use `docker compose up -d --build`, then verify with `curl http://127.0.0.1:3474/healthz`, `curl https://foodlog.ryanckelly.ca/healthz`, or `docker compose ps`. Rebuild the app container after code changes with `docker compose build foodlog`.
+
+## Deployment & MCP Access
+
+FoodLog is deployed as a single Docker Compose service. The container starts both the FastAPI/MCP app and `cloudflared`; Cloudflare Tunnel routes `https://foodlog.ryanckelly.ca/*` to `http://localhost:3474` inside the container. Do not reintroduce the old Tailscale sidecar or `serve.json` path.
+
+Claude uses the custom MCP connector URL `https://foodlog.ryanckelly.ca/mcp`. The server provides first-party OAuth endpoints and dynamic client registration. The protected MCP resource must advertise both `foodlog.read` and `foodlog.write`; otherwise Claude will connect read-only and `log_food`, `edit_entry`, and `delete_entry` will fail. If scopes change, the Claude connector must be reconnected so Claude requests fresh scopes.
 
 ## Coding Style & Naming Conventions
 
@@ -22,7 +28,7 @@ Use 4-space indentation, type-aware Python, and small functions that keep API, p
 
 ## Testing Guidelines
 
-Tests use `pytest`, `pytest-asyncio`, FastAPI `TestClient`, and in-memory SQLite fixtures. Add or update tests when changing route behavior, database models, schemas, MCP tools, external client handling, or nutrition service logic. Keep tests deterministic: mock external FatSecret and USDA calls rather than relying on network access or live credentials.
+Tests use `pytest`, `pytest-asyncio`, FastAPI `TestClient`, and in-memory SQLite fixtures. Add or update tests when changing route behavior, database models, schemas, MCP tools, OAuth registration/consent/token behavior, external client handling, or nutrition service logic. Keep tests deterministic: mock external FatSecret and USDA calls rather than relying on network access or live credentials.
 
 ## Commit & Pull Request Guidelines
 
@@ -30,4 +36,4 @@ Recent history uses short imperative messages, often with Conventional Commit pr
 
 ## Security & Configuration Tips
 
-Copy `.env.example` to `.env` for local or Docker runs, but do not commit real secrets. Treat `.env`, `data/foodlog.db`, and `tailscale-state/` as private runtime state. Tailscale is the intended access layer; document any new public exposure or host-header changes clearly.
+Copy `.env.example` to `.env` for local or Docker runs, but do not commit real secrets. Treat `.env`, `data/foodlog.db`, and Cloudflare tunnel tokens as private runtime state. Only pass the tunnel token into the container as `TUNNEL_TOKEN`; `cloudflared` masks that variable in logs, but it may print arbitrary custom environment variable names. The public surface is Cloudflare Tunnel plus FoodLog OAuth; document any new public hostname, scope, or host-header change clearly.

@@ -1,7 +1,13 @@
-# When You're Back - Cloudflare OAuth Deployment
+# Cloudflare OAuth Deployment
 
 The Tailscale deployment has been superseded. FoodLog now deploys as one
 container that runs the FastAPI/MCP app plus `cloudflared`.
+
+Current production MCP URL:
+
+```text
+https://foodlog.ryanckelly.ca/mcp
+```
 
 ## 1. Create Cloudflare Tunnel
 
@@ -70,12 +76,25 @@ Complete the OAuth flow. When FoodLog asks for the secret, paste
 `FOODLOG_OAUTH_LOGIN_SECRET`.
 
 After that, Claude Android can use the connector from your Claude account.
+Leave optional OAuth client ID and client secret fields blank; FoodLog supports
+Claude's dynamic client registration.
+
+The connector should request both scopes:
+
+```text
+foodlog.read foodlog.write
+```
+
+If Claude reports it can read but cannot log food, reconnect or reauthorize the
+connector so it picks up both scopes from the MCP protected-resource metadata.
 
 ## Troubleshooting
 
 - Tunnel not connected: `docker logs foodlog --tail 100` and check Cloudflare token.
+- Rotated tunnel token: update `CLOUDFLARE_TUNNEL_TOKEN` in `.env`, then run `docker compose up -d --force-recreate`.
 - OAuth fails before consent: verify `FOODLOG_PUBLIC_BASE_URL` matches the public hostname.
 - Consent rejects secret: verify `.env` has the exact `FOODLOG_OAUTH_LOGIN_SECRET`.
+- Claude says write scope is missing: reconnect the Claude connector and verify `https://foodlog.ryanckelly.ca/.well-known/oauth-protected-resource/mcp` includes `foodlog.write`.
 - Reconnect needed: use Claude web or Claude Desktop, then Android will use the refreshed connector.
 
 ## Rollback

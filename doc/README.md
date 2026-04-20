@@ -119,6 +119,14 @@ curl -i -s -X POST https://foodlog.ryanckelly.ca/mcp \
 
 Expected: `401` with `WWW-Authenticate` and `resource_metadata`.
 
+Verify Claude can discover both read and write scopes:
+
+```bash
+curl -s https://foodlog.ryanckelly.ca/.well-known/oauth-protected-resource/mcp
+```
+
+Expected: `scopes_supported` includes both `foodlog.read` and `foodlog.write`.
+
 ## Integration
 
 ### Claude Web and Android
@@ -130,7 +138,16 @@ Add the connector on Claude web or Claude Desktop:
 
 Claude will run the OAuth flow. Use `FOODLOG_OAUTH_LOGIN_SECRET` on the FoodLog
 consent page. After the connector is connected, Claude Android can use it from
-the same Claude account.
+the same Claude account. Leave optional OAuth client ID and client secret fields
+blank; FoodLog supports Claude's dynamic client registration.
+
+The MCP protected-resource metadata advertises both required scopes:
+
+- `foodlog.read` - search foods, read entries, and read summaries
+- `foodlog.write` - log, edit, and delete entries
+
+If Claude can read entries but cannot log food, reconnect or reauthorize the
+connector so it requests both scopes.
 
 ### REST API
 
@@ -177,6 +194,12 @@ docker compose up -d --build
 2. Confirm `CLOUDFLARE_TUNNEL_TOKEN` is set in `.env`.
 3. Confirm the Cloudflare tunnel service target is `http://localhost:3474`.
 
+### Tunnel token was rotated
+
+1. Update `CLOUDFLARE_TUNNEL_TOKEN` in `/opt/foodlog/.env`.
+2. Recreate the container: `docker compose up -d --force-recreate`.
+3. Verify public health: `curl https://foodlog.ryanckelly.ca/healthz`.
+
 ### Container won't start
 
 1. View logs: `docker logs foodlog --tail 100`
@@ -192,6 +215,17 @@ docker compose up -d --build
 
 Verify `.env` has the exact `FOODLOG_OAUTH_LOGIN_SECRET` value you paste into
 the consent page.
+
+### Claude connector is read-only
+
+Verify the protected resource metadata includes `foodlog.write`:
+
+```bash
+curl -s https://foodlog.ryanckelly.ca/.well-known/oauth-protected-resource/mcp
+```
+
+If the metadata is correct, reconnect the Claude connector so Claude requests a
+new token with write scope.
 
 ### MCP endpoint returns "Invalid Host header"
 
@@ -225,6 +259,8 @@ docker logs foodlog --tail 100
   forward is required.
 - The Compose port binding is localhost-only: `127.0.0.1:3474:3474`.
 - `/healthz` is public. REST and MCP access require OAuth bearer tokens.
+- `CLOUDFLARE_TUNNEL_TOKEN` is mapped into the container only as `TUNNEL_TOKEN`
+  so `cloudflared` masks it in logs.
 - Do not commit `.env` or `data/foodlog.db`.
 
 ## Rollback
