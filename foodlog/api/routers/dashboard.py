@@ -11,39 +11,48 @@ from foodlog.services.nutrition import SummaryService
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 templates = Jinja2Templates(directory="foodlog/templates")
 
+
 @router.get("", response_class=HTMLResponse)
 def index(request: Request):
-    return templates.TemplateResponse(request=request, name="dashboard/index.html")
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard/index.html",
+        context={"today": datetime.date.today()},
+    )
+
 
 @router.get("/feed", response_class=HTMLResponse)
 def feed_partial(
     request: Request,
     date_range: str = "today",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     entry_svc = EntryService(db)
     summary_svc = SummaryService(db)
-    
+
     today = datetime.date.today()
     if date_range == "yesterday":
         start_date = today - datetime.timedelta(days=1)
         end_date = start_date
+        range_label = "yesterday"
     elif date_range == "week":
         start_date = today - datetime.timedelta(days=7)
         end_date = today
+        range_label = "the past seven days"
     else:
         start_date = today
         end_date = today
-        
+        range_label = "today"
+
     if start_date == end_date:
         entries = entry_svc.get_by_date(start_date)
         summary = summary_svc.daily(start_date)
     else:
         entries = entry_svc.get_by_range(start_date, end_date)
         summary = summary_svc.range(start_date, end_date)
-        
+
     entries.sort(key=lambda x: x.logged_at, reverse=True)
-    
+
     grouped_entries = []
     if entries:
         current_group = {
@@ -75,12 +84,30 @@ def feed_partial(
                     "total_fat_g": entry.fat_g,
                 }
         grouped_entries.append(current_group)
-        
+
+    p_kcal = (summary.total_protein_g or 0) * 4
+    c_kcal = (summary.total_carbs_g or 0) * 4
+    f_kcal = (summary.total_fat_g or 0) * 9
+    macro_kcal = p_kcal + c_kcal + f_kcal
+    if macro_kcal > 0:
+        p_pct = round(p_kcal / macro_kcal * 100)
+        c_pct = round(c_kcal / macro_kcal * 100)
+        f_pct = max(0, 100 - p_pct - c_pct)
+    else:
+        p_pct = c_pct = f_pct = 0
+
+    entry_count = sum(len(g["entries"]) for g in grouped_entries)
+    course_count = len(grouped_entries)
+
     return templates.TemplateResponse(
         request=request,
-        name="dashboard/feed_partial.html", 
+        name="dashboard/feed_partial.html",
         context={
-            "grouped_entries": grouped_entries, 
-            "summary": summary
-        }
+            "grouped_entries": grouped_entries,
+            "summary": summary,
+            "range_label": range_label,
+            "macro_pct": {"p": p_pct, "c": c_pct, "f": f_pct},
+            "entry_count": entry_count,
+            "course_count": course_count,
+        },
     )

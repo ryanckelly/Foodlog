@@ -1,46 +1,148 @@
-<div class="grid">
-    <div>
-        <article>
-            <header>
-                <strong>Timeline</strong>
-            </header>
-            {% if grouped_entries %}
-                {% for group in grouped_entries %}
-                <div class="meal-{{ group.meal_type }}" style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <span style="color: #64748b; font-size: 0.9em;">
-                            <strong>{{ group.meal_type | title }}</strong> - {{ group.logged_at.strftime('%I:%M %p') }}
-                        </span>
-                        <span><strong>{{ group.total_calories | round }} kcal</strong></span>
+<section class="hero">
+    <div class="hero-figure">
+        <div class="kicker">Total inscribed for {{ range_label }}</div>
+        <h2 class="kcal">
+            {{ summary.total_calories | round | int }}<sup>kcal</sup>
+        </h2>
+        <p class="caption">
+            {% if course_count == 0 %}
+                The table stands untouched. <b>Nothing yet recorded.</b>
+            {% elif course_count == 1 %}
+                A single course, <b>{{ entry_count }} item{% if entry_count != 1 %}s{% endif %}</b> entered into the record.
+            {% else %}
+                Across <b>{{ course_count }} courses</b> and <b>{{ entry_count }} items</b>, the day assembles itself.
+            {% endif %}
+        </p>
+    </div>
+
+    <aside class="macro-panel">
+        <div class="section-label">Répartition des macros</div>
+        <div class="macro-bar" aria-hidden="true">
+            <span class="seg seg-p" style="width: {{ macro_pct.p }}%"></span>
+            <span class="seg seg-c" style="width: {{ macro_pct.c }}%"></span>
+            <span class="seg seg-f" style="width: {{ macro_pct.f }}%"></span>
+        </div>
+        <ul class="macro-list">
+            <li>
+                <span class="swatch swatch-p"></span>
+                <span class="name">protein</span>
+                <span class="value">{{ summary.total_protein_g | round | int }}<span class="unit">g</span></span>
+                <span class="pct">{{ macro_pct.p }}% of calories</span>
+            </li>
+            <li>
+                <span class="swatch swatch-c"></span>
+                <span class="name">carbohydrate</span>
+                <span class="value">{{ summary.total_carbs_g | round | int }}<span class="unit">g</span></span>
+                <span class="pct">{{ macro_pct.c }}% of calories</span>
+            </li>
+            <li>
+                <span class="swatch swatch-f"></span>
+                <span class="name">fat</span>
+                <span class="value">{{ summary.total_fat_g | round | int }}<span class="unit">g</span></span>
+                <span class="pct">{{ macro_pct.f }}% of calories</span>
+            </li>
+        </ul>
+    </aside>
+</section>
+
+<section class="body-grid">
+    <div class="timeline">
+        <div class="column-heading">
+            <h3>Les courses</h3>
+            <span class="count">{{ course_count }} in order, newest first</span>
+        </div>
+
+        {% if grouped_entries %}
+            <ol class="courses">
+            {% for group in grouped_entries %}
+                <li class="course" data-meal="{{ group.meal_type }}">
+                    <div class="course-head">
+                        <span class="course-ordinal"><span class="dot"></span></span>
+                        <h4 class="course-title">
+                            <span class="course-meal">{{ group.meal_type | title }}</span>
+                            <span style="color: var(--muted); font-style: normal; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.2em; margin-left: 0.6rem;">
+                                · {{ group.entries | length }} item{% if group.entries | length != 1 %}s{% endif %}
+                            </span>
+                        </h4>
+                        <div class="course-time-kcal">
+                            <span class="course-time">{{ group.logged_at.strftime('%H:%M') }}</span>
+                            <span class="course-kcal">{{ group.total_calories | round | int }}<span class="unit">kcal</span></span>
+                        </div>
                     </div>
-                    <ul style="margin: 10px 0; padding-left: 20px; font-size: 0.95em;">
+
+                    <ul class="course-entries">
                         {% for entry in group.entries %}
-                        <li>{{ entry.food_name }} ({{ entry.quantity }} {{ entry.unit }}) - {{ entry.calories | round }} kcal</li>
+                        <li>
+                            <span class="bullet">※</span>
+                            <span class="food">{{ entry.food_name }}</span>
+                            <span class="qty">{{ entry.quantity }} {{ entry.unit }}</span>
+                            <span class="entry-kcal">{{ entry.calories | round | int }}</span>
+                        </li>
                         {% endfor %}
                     </ul>
-                    <div style="margin-top: 5px;">
-                        <span class="macro-pill">P: {{ group.total_protein_g | round }}g</span>
-                        <span class="macro-pill">C: {{ group.total_carbs_g | round }}g</span>
-                        <span class="macro-pill">F: {{ group.total_fat_g | round }}g</span>
+
+                    <div class="course-macros">
+                        <span class="course-macro">Protein <b>{{ group.total_protein_g | round | int }}g</b></span>
+                        <span class="course-macro">Carbs <b>{{ group.total_carbs_g | round | int }}g</b></span>
+                        <span class="course-macro">Fat <b>{{ group.total_fat_g | round | int }}g</b></span>
                     </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p>No entries found for this period.</p>
-            {% endif %}
-        </article>
+                </li>
+            {% endfor %}
+            </ol>
+        {% else %}
+            <div class="empty">no courses recorded for this period</div>
+        {% endif %}
     </div>
-    <div>
-        <article>
-            <header>
-                <strong>Summary</strong>
-            </header>
-            <ul>
-                <li>Total Calories: <strong>{{ summary.total_calories | round }}</strong></li>
-                <li>Protein: <strong>{{ summary.total_protein_g | round }}g</strong></li>
-                <li>Carbs: <strong>{{ summary.total_carbs_g | round }}g</strong></li>
-                <li>Fat: <strong>{{ summary.total_fat_g | round }}g</strong></li>
-            </ul>
-        </article>
-    </div>
-</div>
+
+    <aside class="side">
+        <div class="side-block">
+            <div class="section-label">Registre du jour</div>
+            <div class="stat-row">
+                <span class="k">calories</span>
+                <span class="v">{{ summary.total_calories | round | int }} kcal</span>
+            </div>
+            <div class="stat-row">
+                <span class="k">protein</span>
+                <span class="v">{{ summary.total_protein_g | round | int }} g</span>
+            </div>
+            <div class="stat-row">
+                <span class="k">carbohydrate</span>
+                <span class="v">{{ summary.total_carbs_g | round | int }} g</span>
+            </div>
+            <div class="stat-row">
+                <span class="k">fat</span>
+                <span class="v">{{ summary.total_fat_g | round | int }} g</span>
+            </div>
+        </div>
+
+        <div class="side-block">
+            <div class="section-label">Observations</div>
+            <div class="stat-row">
+                <span class="k">courses</span>
+                <span class="v">{{ course_count }}</span>
+            </div>
+            <div class="stat-row">
+                <span class="k">items logged</span>
+                <span class="v">{{ entry_count }}</span>
+            </div>
+            <div class="stat-row">
+                <span class="k">kcal / item</span>
+                <span class="v">
+                    {% if entry_count > 0 %}
+                        {{ (summary.total_calories / entry_count) | round | int }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        <div class="side-block">
+            <div class="section-label">Colophon</div>
+            <p style="font-family: var(--font-body); font-style: italic; color: var(--ink-soft); margin: 0; font-size: 0.98rem; line-height: 1.5;">
+                Printed on the kitchen press. Figures set in <span style="font-variant-numeric: tabular-nums;">IBM Plex Mono</span>;
+                display in <em>Fraunces</em>, body in <em>Instrument Serif</em>.
+            </p>
+        </div>
+    </aside>
+</section>
