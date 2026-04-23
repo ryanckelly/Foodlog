@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,6 +13,8 @@ from foodlog.db.database import get_engine
 from foodlog.db.models import Base
 from foodlog.services.oauth import FOODLOG_SCOPES, FoodLogOAuthProvider, FoodLogTokenVerifier
 from mcp_server.server import create_mcp_server
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -44,6 +47,13 @@ def create_app() -> FastAPI:
     from foodlog.api.auth import OAuthResourceMiddleware
 
     app.add_middleware(OAuthResourceMiddleware)
+    if not settings.foodlog_session_secret_key:
+        logger.warning(
+            "FOODLOG_SESSION_SECRET_KEY is not set; session cookies use an "
+            "insecure fallback secret. Set this in production."
+        )
+    # Registered after OAuthResourceMiddleware so Starlette's reverse-order
+    # middleware stacking makes SessionMiddleware the outer wrapper.
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.foodlog_session_secret_key or "unsafe-default",
