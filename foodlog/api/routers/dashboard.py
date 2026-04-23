@@ -1,8 +1,7 @@
 import datetime
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from starlette.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from foodlog.api.dependencies import get_db

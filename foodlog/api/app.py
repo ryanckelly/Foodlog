@@ -52,6 +52,14 @@ def create_app() -> FastAPI:
             "FOODLOG_SESSION_SECRET_KEY is not set; session cookies use an "
             "insecure fallback secret. Set this in production."
         )
+    if settings.foodlog_public_base_url and not settings.google_sso_configured:
+        logger.warning(
+            "Dashboard is exposed via FOODLOG_PUBLIC_BASE_URL=%s without Google SSO configured. "
+            "Anyone reaching the public URL can access /dashboard. Set GOOGLE_CLIENT_ID, "
+            "GOOGLE_CLIENT_SECRET, FOODLOG_SESSION_SECRET_KEY, and FOODLOG_AUTHORIZED_EMAIL "
+            "to enable SSO, or restrict access upstream.",
+            settings.foodlog_public_base_url,
+        )
     # Registered after OAuthResourceMiddleware so Starlette's reverse-order
     # middleware stacking makes SessionMiddleware the outer wrapper.
     app.add_middleware(
