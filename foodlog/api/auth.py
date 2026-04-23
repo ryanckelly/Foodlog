@@ -23,6 +23,7 @@ PUBLIC_EXACT_PATHS = {
 PUBLIC_PREFIX_PATHS = (
     "/.well-known/oauth-protected-resource",
     "/dashboard",
+    "/health/connect",
 )
 
 

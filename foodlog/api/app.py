@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
     from foodlog.api.oauth import router as oauth_router
     from foodlog.api.routers.dashboard import router as dashboard_router
     from foodlog.api.routers.sso import router as sso_router
+    from foodlog.api.routers.health_oauth import router as health_oauth_router
 
     app.include_router(oauth_router)
     app.include_router(entries_router)
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(foods_router)
     app.include_router(dashboard_router)
     app.include_router(sso_router)
+    app.include_router(health_oauth_router)
 
     app.router.routes.extend(
         create_auth_routes(
