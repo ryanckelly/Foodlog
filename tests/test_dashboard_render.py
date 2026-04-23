@@ -1,4 +1,4 @@
-"""Smoke test the editorial dashboard renders with seeded entries."""
+"""Smoke test the dashboard renders cleanly with seeded entries."""
 import datetime
 import pytest
 from fastapi.testclient import TestClient
@@ -33,44 +33,30 @@ def seeded_entries(db_session):
     return rows
 
 
-def test_index_masthead_renders(raw_client: TestClient):
+def test_index_topbar_renders(raw_client: TestClient):
     r = raw_client.get("/dashboard")
     assert r.status_code == 200
-    for m in ("Le Journal", "Gastronomique", "Vol. MMXXVI",
-              "Fraunces", "Période", "segmented"):
+    for m in ("FoodLog", "Inter", "segmented",
+              "date_range", "Today", "Yesterday", "7 days"):
         assert m in r.text, f"missing in index: {m}"
 
 
 def test_feed_empty_state_renders(raw_client: TestClient):
     r = raw_client.get("/dashboard/feed?date_range=today")
     assert r.status_code == 200
-    assert "no courses recorded" in r.text
-    assert "Répartition des macros" in r.text
+    assert "Nothing logged" in r.text
 
 
 def test_feed_seeded_entries_render(raw_client: TestClient, seeded_entries):
     r = raw_client.get("/dashboard/feed?date_range=today")
     assert r.status_code == 200
     for m in ("Poached egg", "Grilled chicken salad", "Dark chocolate",
-              "course-ordinal", "macro-bar", "Les courses",
-              "Registre du jour", "Breakfast", "Lunch", "Snack"):
+              "meal-dot", "macro-bar", "Breakfast", "Lunch", "Snack",
+              "newest first"):
         assert m in r.text, f"missing in feed: {m}"
 
-    # macro percentages should sum roughly to 100
     import re
-    pcts = [int(x) for x in re.findall(r'(\d+)% of calories', r.text)]
-    assert len(pcts) == 3
-    assert 99 <= sum(pcts) <= 100
-
-
-def test_feed_also_writes_preview(raw_client: TestClient, seeded_entries, tmp_path):
-    """Write full page to tmp for human inspection when run locally."""
-    idx = raw_client.get("/dashboard").text
-    feed = raw_client.get("/dashboard/feed?date_range=today").text
-    full = idx.replace(
-        '<div id="dashboard-content">\n    <div class="loading">Mesurant</div>\n</div>',
-        f'<div id="dashboard-content">{feed}</div>',
-    )
-    out = tmp_path / "dashboard_preview.html"
-    out.write_text(full)
-    assert out.exists() and out.stat().st_size > 5000
+    pcts = [int(x) for x in re.findall(r'width:\s*(\d+)%', r.text)]
+    # protein + carbs + fat widths in the macro bar should sum to ~100
+    assert len(pcts) >= 3
+    assert 99 <= sum(pcts[:3]) <= 100

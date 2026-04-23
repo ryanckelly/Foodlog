@@ -1,23 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
-<header class="masthead">
-    <div class="meta-left">
-        <span>Vol. MMXXVI · №{{ today.strftime('%j') | int }}</span>
-        <span>{{ today.strftime('%A') }}</span>
+<header class="topbar">
+    <div class="brand">
+        <span class="mark"><span class="dot"></span>FoodLog</span>
+        <span class="date">{{ today.strftime('%A, %b %-d') }}</span>
     </div>
-    <div>
-        <h1 class="title">Le Journal<br><em>Gastronomique</em></h1>
-        <p class="rule-epigraph">a quiet ledger of the table — compiled for R.C.K.</p>
-    </div>
-    <div class="meta-right">
-        <span>{{ today.strftime('%d · %b · %Y') | upper }}</span>
-        <span>Édition privée</span>
-    </div>
-</header>
 
-<section class="ribbon">
-    <span class="label">Période d'observation</span>
     <form class="segmented" role="radiogroup" aria-label="Date range">
         <input type="radio" id="r-today"     name="date_range" value="today"     checked
                hx-get="/dashboard/feed" hx-target="#dashboard-content" hx-trigger="change, load from:body">
@@ -29,11 +18,11 @@
 
         <input type="radio" id="r-week"      name="date_range" value="week"
                hx-get="/dashboard/feed" hx-target="#dashboard-content" hx-trigger="change">
-        <label for="r-week">This Week</label>
+        <label for="r-week">7 days</label>
     </form>
-</section>
+</header>
 
 <div id="dashboard-content">
-    <div class="loading">Mesurant</div>
+    <div class="loading">Loading</div>
 </div>
 {% endblock %}

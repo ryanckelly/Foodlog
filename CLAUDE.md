@@ -24,6 +24,10 @@ Claude uses the custom MCP connector URL `https://foodlog.ryanckelly.ca/mcp`. Th
 
 The web dashboard is served at `/dashboard`. It uses Jinja2 templates and HTMX and is currently restricted to local network access. The OAuth middleware specifically rejects requests to `/dashboard` if they contain Cloudflare headers (`cf-connecting-ip` or `cf-ray`), ensuring it remains private. See `DASHBOARD.md` for details. A planned update will replace this restriction with Google Single Sign-On (SSO) to allow secure public access.
 
+## Design System
+
+The dashboard's visual language follows the Notion-inspired design system documented in `DESIGN.md` at the repo root. Key tokens: white canvas (`#ffffff`) with warm-white sunk surface (`#f6f5f4`), `rgba(0,0,0,0.95)` text, Notion Blue (`#0075de`) as the single saturated UI accent, Inter as the only typeface. Meal colors use Notion's semantic accents (orange/green/purple/teal). When editing dashboard templates or adding new UI surfaces, reference `DESIGN.md` for typography scale, shadow system, border radii, and component patterns to stay on-system — do not introduce new accent colors or type families without updating the spec.
+
 ## Coding Style & Naming Conventions
 
 Use 4-space indentation, type-aware Python, and small functions that keep API, persistence, client, and service responsibilities separate. Prefer explicit imports from local packages, as existing modules do. Name test files `test_*.py`, API routers by resource (`entries.py`, `foods.py`, `summary.py`), and Pydantic/SQLAlchemy models with clear domain names. Keep configuration centralized in `foodlog/config.py` and avoid hard-coded credentials or local paths.

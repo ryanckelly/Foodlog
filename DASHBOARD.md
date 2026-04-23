@@ -16,7 +16,7 @@ The dashboard is built directly into the existing FastAPI backend using Server-S
 
 * **HTML Templating:** Jinja2 templates (`foodlog/templates/`) rendered on the server.
 * **Interactivity:** HTMX for dynamic content updates (like changing date ranges) without full page reloads.
-* **Styling:** Pico.css (via CDN) for a lightweight, classless CSS framework.
+* **Styling:** Inline CSS in `base.html` driven by CSS custom properties, with Inter loaded from Google Fonts. The visual language is a Notion-inspired design system — full spec in `DESIGN.md` at the repo root. When changing palette, typography, or component patterns, update `DESIGN.md` alongside the templates so the spec stays authoritative.
 
 ## How it Accesses Data
 
