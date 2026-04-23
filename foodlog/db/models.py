@@ -1,7 +1,7 @@
 import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 
@@ -135,3 +135,109 @@ class OAuthRefreshToken(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
+
+
+class GoogleOAuthToken(Base):
+    """Singleton row holding the encrypted Google Health refresh token."""
+    __tablename__ = "google_oauth_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    refresh_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes_json: Mapped[str] = mapped_column(Text, nullable=False)
+    issued_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (CheckConstraint("id = 1", name="google_oauth_token_singleton"),)
+
+
+class DailyActivity(Base):
+    __tablename__ = "daily_activity"
+
+    date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    steps: Mapped[int] = mapped_column(Integer, nullable=False)
+    active_calories_kcal: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class BodyComposition(Base):
+    __tablename__ = "body_composition"
+
+    external_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    measured_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class RestingHeartRate(Base):
+    __tablename__ = "resting_heart_rate"
+
+    external_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    measured_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    bpm: Mapped[int] = mapped_column(Integer, nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class SleepSession(Base):
+    __tablename__ = "sleep_sessions"
+
+    external_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    start_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, index=True)
+    end_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    duration_min: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class Workout(Base):
+    __tablename__ = "workouts"
+
+    external_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    start_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, index=True)
+    end_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    activity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    duration_min: Mapped[int] = mapped_column(Integer, nullable=False)
+    calories_kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    hr_samples = relationship(
+        "WorkoutHrSample",
+        back_populates="workout",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class WorkoutHrSample(Base):
+    __tablename__ = "workout_hr_samples"
+
+    workout_id: Mapped[str] = mapped_column(
+        String(255),
+        ForeignKey("workouts.external_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    sample_at: Mapped[datetime.datetime] = mapped_column(DateTime, primary_key=True)
+    bpm: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    workout = relationship("Workout", back_populates="hr_samples")

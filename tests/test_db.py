@@ -95,3 +95,21 @@ def test_get_engine_configures_driver_qualified_sqlite_url(monkeypatch, tmp_path
     engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'foodlog.db'}")
 
     assert called["engine"] is engine
+
+
+def test_google_health_tables_created(db_session):
+    """All seven new Google Health tables exist after create_all."""
+    from sqlalchemy import inspect
+    insp = inspect(db_session.get_bind())
+    tables = set(insp.get_table_names())
+    required = {
+        "google_oauth_token",
+        "daily_activity",
+        "body_composition",
+        "resting_heart_rate",
+        "sleep_sessions",
+        "workouts",
+        "workout_hr_samples",
+    }
+    missing = required - tables
+    assert not missing, f"missing tables: {missing}"
