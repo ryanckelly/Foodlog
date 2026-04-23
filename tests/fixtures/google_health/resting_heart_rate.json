@@ -1,0 +1,13 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataPoints/rhr-2026-04-22",
+      "dataType": "RESTING_HEART_RATE",
+      "startTime": "2026-04-22T06:00:00Z",
+      "endTime": "2026-04-22T06:00:00Z",
+      "value": {"intValue": 58},
+      "originDataSource": "com.google.android.wearable.app"
+    }
+  ],
+  "nextPageToken": ""
+}

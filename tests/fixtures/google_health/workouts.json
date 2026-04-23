@@ -1,0 +1,20 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataPoints/workout-2026-04-22-run",
+      "dataType": "EXERCISE_SESSION",
+      "startTime": "2026-04-22T07:30:00Z",
+      "endTime": "2026-04-22T08:15:00Z",
+      "activityType": "running",
+      "value": {"activityType": "running"},
+      "aggregates": {
+        "caloriesKcal": 412.5,
+        "distanceMeters": 6850.0,
+        "avgHeartRateBpm": 152,
+        "maxHeartRateBpm": 174
+      },
+      "originDataSource": "com.google.android.wearable.app"
+    }
+  ],
+  "nextPageToken": ""
+}

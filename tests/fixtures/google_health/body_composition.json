@@ -1,0 +1,13 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataPoints/bc-1",
+      "dataType": "BODY_WEIGHT",
+      "startTime": "2026-04-22T07:03:00Z",
+      "endTime": "2026-04-22T07:03:00Z",
+      "value": {"floatValue": 81.4},
+      "originDataSource": "com.renpho.fit"
+    }
+  ],
+  "nextPageToken": ""
+}

@@ -1,0 +1,45 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataPoints/hr-1",
+      "dataType": "HEART_RATE",
+      "startTime": "2026-04-22T07:30:00Z",
+      "endTime": "2026-04-22T07:30:00Z",
+      "value": {"intValue": 140},
+      "originDataSource": "com.google.android.wearable.app"
+    },
+    {
+      "name": "users/me/dataPoints/hr-2",
+      "dataType": "HEART_RATE",
+      "startTime": "2026-04-22T07:41:00Z",
+      "endTime": "2026-04-22T07:41:00Z",
+      "value": {"intValue": 152},
+      "originDataSource": "com.google.android.wearable.app"
+    },
+    {
+      "name": "users/me/dataPoints/hr-3",
+      "dataType": "HEART_RATE",
+      "startTime": "2026-04-22T07:52:00Z",
+      "endTime": "2026-04-22T07:52:00Z",
+      "value": {"intValue": 163},
+      "originDataSource": "com.google.android.wearable.app"
+    },
+    {
+      "name": "users/me/dataPoints/hr-4",
+      "dataType": "HEART_RATE",
+      "startTime": "2026-04-22T08:03:00Z",
+      "endTime": "2026-04-22T08:03:00Z",
+      "value": {"intValue": 158},
+      "originDataSource": "com.google.android.wearable.app"
+    },
+    {
+      "name": "users/me/dataPoints/hr-5",
+      "dataType": "HEART_RATE",
+      "startTime": "2026-04-22T08:14:00Z",
+      "endTime": "2026-04-22T08:14:00Z",
+      "value": {"intValue": 147},
+      "originDataSource": "com.google.android.wearable.app"
+    }
+  ],
+  "nextPageToken": ""
+}
