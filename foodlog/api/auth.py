@@ -16,23 +16,19 @@ PUBLIC_EXACT_PATHS = {
     "/register",
     "/revoke",
     "/oauth/consent",
+    "/login",
+    "/auth/callback",
+    "/logout",
 }
 PUBLIC_PREFIX_PATHS = (
     "/.well-known/oauth-protected-resource",
+    "/dashboard",
 )
 
 
 class OAuthResourceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
-        if path.startswith("/dashboard"):
-            if "cf-connecting-ip" in request.headers or "cf-ray" in request.headers:
-                return JSONResponse(
-                    {"detail": "Dashboard is restricted to local network access only."},
-                    status_code=403,
-                )
-            return await call_next(request)
-
         if (
             request.method == "OPTIONS"
             or path == "/mcp"

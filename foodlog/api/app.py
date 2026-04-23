@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from mcp.server.auth.routes import create_auth_routes
 from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
 from pydantic import AnyHttpUrl
+from starlette.middleware.sessions import SessionMiddleware
 
 from foodlog.api.dependencies import cleanup_http_client, get_session_factory_cached
 from foodlog.config import settings
@@ -43,6 +44,10 @@ def create_app() -> FastAPI:
     from foodlog.api.auth import OAuthResourceMiddleware
 
     app.add_middleware(OAuthResourceMiddleware)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.foodlog_session_secret_key or "unsafe-default",
+    )
 
     @app.get("/health")
     def health():
