@@ -1,11 +1,18 @@
+import logging
+
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Request
-from starlette.responses import HTMLResponse, RedirectResponse
+from starlette.responses import PlainTextResponse, RedirectResponse
 
 from foodlog.config import settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["sso"])
 
+# client_id / client_secret are captured at import time. Changing these settings
+# at runtime requires reloading this module.
 oauth = OAuth()
 oauth.register(
     name="google",
@@ -19,25 +26,33 @@ oauth.register(
 @router.get("/login")
 async def login(request: Request):
     if not settings.google_sso_configured:
-        return HTMLResponse("SSO is not configured.", status_code=500)
+        return PlainTextResponse("SSO is not configured.", status_code=500)
     redirect_uri = f"{settings.public_base_url}/auth/callback"
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    try:
+        return await oauth.google.authorize_redirect(request, redirect_uri)
+    except OAuthError:
+        logger.exception("Google OAuth authorize_redirect failed")
+        return PlainTextResponse(
+            "Unable to contact Google for authentication.", status_code=502
+        )
 
 
 @router.get("/auth/callback")
 async def auth_callback(request: Request):
     try:
         token = await oauth.google.authorize_access_token(request)
-    except Exception:
-        return HTMLResponse("Authentication failed.", status_code=401)
+    except OAuthError:
+        logger.exception("Google OAuth token exchange failed")
+        return PlainTextResponse("Authentication failed.", status_code=401)
 
     userinfo = token.get("userinfo")
     if not userinfo or "email" not in userinfo:
-        return HTMLResponse("Could not retrieve email from Google.", status_code=401)
+        return PlainTextResponse("Could not retrieve email from Google.", status_code=401)
 
     email = userinfo["email"]
     if email.lower() != settings.foodlog_authorized_email.lower():
-        return HTMLResponse(f"Unauthorized: {email} is not permitted.", status_code=403)
+        logger.warning("Rejected unauthorized Google SSO login attempt for %s", email)
+        return PlainTextResponse("Unauthorized.", status_code=403)
 
     request.session["user"] = email
     return RedirectResponse(url="/dashboard")

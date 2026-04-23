@@ -48,6 +48,7 @@ class Settings(BaseSettings):
             and self.google_client_secret
             and self.foodlog_session_secret_key
             and self.foodlog_authorized_email
+            and self.foodlog_public_base_url
         )
 
 
