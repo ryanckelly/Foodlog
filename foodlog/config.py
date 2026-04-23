@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     oauth_authorization_code_ttl_seconds: int = 5 * 60
     oauth_access_token_ttl_seconds: int = 60 * 60
     oauth_refresh_token_ttl_seconds: int = 90 * 24 * 60 * 60
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    foodlog_session_secret_key: str = ""
+    foodlog_authorized_email: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
@@ -36,6 +40,15 @@ class Settings(BaseSettings):
     @property
     def usda_configured(self) -> bool:
         return bool(self.usda_api_key)
+
+    @property
+    def google_sso_configured(self) -> bool:
+        return bool(
+            self.google_client_id
+            and self.google_client_secret
+            and self.foodlog_session_secret_key
+            and self.foodlog_authorized_email
+        )
 
 
 settings = Settings()
