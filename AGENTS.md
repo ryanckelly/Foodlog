@@ -22,7 +22,7 @@ FoodLog is deployed as a single Docker Compose service. The container starts bot
 
 Claude uses the custom MCP connector URL `https://foodlog.ryanckelly.ca/mcp`. The server provides first-party OAuth endpoints and dynamic client registration. The protected MCP resource must advertise both `foodlog.read` and `foodlog.write`; otherwise Claude will connect read-only and `log_food`, `edit_entry`, and `delete_entry` will fail. If scopes change, the Claude connector must be reconnected so Claude requests fresh scopes.
 
-The web dashboard is served at `/dashboard`. It uses Jinja2 templates and HTMX and is currently restricted to local network access. The OAuth middleware specifically rejects requests to `/dashboard` if they contain Cloudflare headers (`cf-connecting-ip` or `cf-ray`), ensuring it remains private. See `DASHBOARD.md` for details. A planned update will replace this restriction with Google Single Sign-On (SSO) to allow secure public access.
+The web dashboard is served at `/dashboard`. It uses Jinja2 templates and HTMX and is gated by Google Single Sign-On (SSO). When `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FOODLOG_SESSION_SECRET_KEY`, `FOODLOG_AUTHORIZED_EMAIL`, and `FOODLOG_PUBLIC_BASE_URL` are all set, unauthenticated dashboard requests redirect to `/login` and only the single authorized email can sign in. When SSO is not configured (any required env var missing), the dashboard is open — intended for local dev only, and the app logs a startup warning. See `DASHBOARD.md` for the full flow.
 
 ## Coding Style & Naming Conventions
 

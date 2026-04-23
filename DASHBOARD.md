@@ -4,11 +4,13 @@ FoodLog includes a local web dashboard to view daily food logs, caloric intake, 
 
 ## Access
 
-The dashboard is accessible only from the local network (e.g., `http://192.168.1.40:3474/dashboard`). 
+The dashboard is gated by Google Single Sign-On (SSO). When SSO is configured via environment variables (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FOODLOG_SESSION_SECRET_KEY`, `FOODLOG_AUTHORIZED_EMAIL`, plus `FOODLOG_PUBLIC_BASE_URL`), any unauthenticated request to `/dashboard` or `/dashboard/feed` redirects to `/login`, which starts the Google OAuth flow. On return, `/auth/callback` verifies the authenticated Google email case-insensitively matches `FOODLOG_AUTHORIZED_EMAIL` and installs a signed session cookie (Starlette's `SessionMiddleware` + `itsdangerous`). Only the single authorized email can reach the dashboard.
 
-It is **intentionally restricted from public internet access**. The FastAPI application sits behind a Cloudflare Tunnel for its MCP and OAuth endpoints, but the `OAuthResourceMiddleware` (in `foodlog/api/auth.py`) actively blocks any requests to `/dashboard` that contain Cloudflare-specific headers (`cf-connecting-ip` or `cf-ray`). This ensures that even if someone guesses the URL, the dashboard remains inaccessible from the public internet.
+When SSO is *not* configured (any of the required env vars missing), the dashboard falls back to being open — intended for local development only. The app emits a startup warning to the logs in this case so the operator sees the misconfiguration.
 
-To allow local network access, the Docker Compose configuration binds port `3474` to all interfaces (`"3474:3474"` instead of `"127.0.0.1:3474:3474"`).
+Docker Compose binds port `3474` to all interfaces so the dashboard is reachable on the LAN at `http://<host>:3474/dashboard`. On the public Cloudflare Tunnel, `https://foodlog.ryanckelly.ca/dashboard` routes to the same gate. Either way, the SSO check enforces the single-user policy.
+
+To log out, visit `/logout` — the session key is cleared and you're redirected to `/dashboard`, which then redirects back to `/login` if SSO is configured.
 
 ## Architecture
 
