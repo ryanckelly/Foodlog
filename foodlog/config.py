@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     foodlog_session_secret_key: str = ""
     foodlog_authorized_email: str = ""
+    foodlog_google_token_key: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
@@ -40,6 +41,15 @@ class Settings(BaseSettings):
     @property
     def usda_configured(self) -> bool:
         return bool(self.usda_api_key)
+
+    @property
+    def google_health_configured(self) -> bool:
+        # Health requires SSO credentials (shared OAuth client) + the token encryption key.
+        return bool(
+            self.google_client_id
+            and self.google_client_secret
+            and self.foodlog_google_token_key
+        )
 
     @property
     def google_sso_configured(self) -> bool:
