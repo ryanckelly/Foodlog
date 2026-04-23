@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from foodlog.config import settings
