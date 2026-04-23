@@ -8,6 +8,7 @@ row.
 from __future__ import annotations
 
 import base64
+import binascii
 import datetime
 import json
 import secrets
@@ -15,7 +16,7 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from foodlog.api.dependencies import get_db
@@ -51,7 +52,7 @@ def _decode_id_token_email(id_token: str) -> str | None:
         padded = payload_b64 + "=" * (-len(payload_b64) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded))
         return payload.get("email")
-    except Exception:
+    except (ValueError, json.JSONDecodeError, binascii.Error):
         return None
 
 
