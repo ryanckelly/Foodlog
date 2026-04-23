@@ -23,6 +23,10 @@ Keeping them separate means:
 - A separate "Connect Google Health" button lives on the dashboard. It kicks off its own OAuth flow with its own callback, its own token storage, and its own consent screen.
 - Revoking either grant does not affect the other.
 
+**But they share two things:**
+1. **One Google OAuth client** (one entry in Google Cloud Console, one `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` pair). Scopes are requested per-authorize-call, not per-client. SSO asks for `openid email profile`; Health asks for the `googlehealth.*` scopes with `access_type=offline`. This keeps Google's "third-party apps" list clean and matches Google's recommended pattern.
+2. **The SSO session is a prerequisite for Health connect.** `/health/connect` requires an authenticated session (`request.session["user"] == settings.authorized_email`). If unauthenticated, it redirects to `/login` first. This closes a gap where a malicious redirect could connect a non-authorized Google account to the singleton token row.
+
 ## Architecture
 
 ### On-Presence Fetch Pattern
@@ -45,9 +49,15 @@ If step 3 returns `invalid_grant`, the handler returns a banner prompting the us
 
 ### OAuth Client
 
-A **second** Google OAuth 2.0 Client registered separately from the SSO client, so the two surfaces can be enabled/disabled independently, tokens revoked independently, and consent screens reasoned about independently.
+**Same** Google OAuth 2.0 Client as the SSO flow. One client app in Google Cloud Console. Scopes vary per authorize call:
+- `/login` → `openid email profile` (session-only, no refresh token)
+- `/health/connect` → the `googlehealth.*` scopes below with `access_type=offline` (refresh token persisted)
 
-Scopes requested (all read-only):
+Both routes reuse `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. There is no separate Health-only client.
+
+**Session dependency:** `/health/connect` is guarded by the SSO session check. The route handler returns a redirect to `/login` if `request.session.get("user") != settings.authorized_email`. This makes the Health connect flow impossible to initiate without first authenticating as the authorized user.
+
+Scopes requested at `/health/connect` (all read-only):
 - `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly` — steps, active calories, workouts
 - `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly` — weight, body fat, resting HR, workout HR samples
 - `https://www.googleapis.com/auth/googlehealth.sleep.readonly` — sleep sessions
@@ -227,22 +237,21 @@ Styling follows `DESIGN.md` tokens — no new colors, no new type families.
 
 ## Configuration
 
-New environment variables (added to `.env.example`):
-- `GOOGLE_HEALTH_CLIENT_ID` — OAuth 2.0 client id for the Health-scoped app (distinct from `GOOGLE_CLIENT_ID` used for SSO).
-- `GOOGLE_HEALTH_CLIENT_SECRET` — client secret.
+This spec introduces **one** new environment variable (added to `.env.example`):
 - `FOODLOG_GOOGLE_TOKEN_KEY` — Fernet key for encrypting the refresh token at rest.
+
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are **reused from the SSO spec** — the Health flow uses the same OAuth client. No separate Health-only credentials.
 
 Health settings join `foodlog/config.py`:
 ```python
-google_health_client_id: str = ""
-google_health_client_secret: str = ""
 foodlog_google_token_key: str = ""
 
 @property
 def google_health_configured(self) -> bool:
+    # Health requires SSO credentials (shared OAuth client) + the token encryption key.
     return bool(
-        self.google_health_client_id
-        and self.google_health_client_secret
+        self.google_client_id
+        and self.google_client_secret
         and self.foodlog_google_token_key
     )
 ```
