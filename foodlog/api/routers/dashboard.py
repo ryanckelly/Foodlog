@@ -1,10 +1,12 @@
 import datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 from foodlog.api.dependencies import get_db
+from foodlog.config import settings
 from foodlog.services.logging import EntryService
 from foodlog.services.nutrition import SummaryService
 
@@ -14,6 +16,9 @@ templates = Jinja2Templates(directory="foodlog/templates")
 
 @router.get("", response_class=HTMLResponse)
 def index(request: Request):
+    if settings.google_sso_configured and "user" not in request.session:
+        return RedirectResponse(url="/login")
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard/index.html",
@@ -27,6 +32,9 @@ def feed_partial(
     date_range: str = "today",
     db: Session = Depends(get_db),
 ):
+    if settings.google_sso_configured and "user" not in request.session:
+        return HTMLResponse("Unauthorized", status_code=401)
+
     entry_svc = EntryService(db)
     summary_svc = SummaryService(db)
 

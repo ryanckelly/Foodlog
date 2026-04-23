@@ -19,6 +19,12 @@ TEST_ACCESS_TOKEN = "test-access-token"
 def _oauth_settings(monkeypatch):
     monkeypatch.setattr(settings, "foodlog_public_base_url", "https://foodlog.example.com")
     monkeypatch.setattr(settings, "foodlog_oauth_login_secret", "test-login-secret")
+    # Ensure Google SSO is disabled by default so dashboard/session-guarded routes
+    # don't require a logged-in user during tests.
+    monkeypatch.setattr(settings, "google_client_id", "")
+    monkeypatch.setattr(settings, "google_client_secret", "")
+    monkeypatch.setattr(settings, "foodlog_session_secret_key", "")
+    monkeypatch.setattr(settings, "foodlog_authorized_email", "")
 
 
 @pytest.fixture
