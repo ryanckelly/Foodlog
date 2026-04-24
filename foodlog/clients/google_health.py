@@ -23,8 +23,8 @@ BASE_URL = "https://health.googleapis.com"
 API_VERSION = "v4"
 
 # Verified against https://developers.google.com/health/data-types — endpoints use
-# kebab-case in the URL path (filter params use snake_case instead; see note in
-# _paginate). Update here if Google renames a type.
+# kebab-case in the URL path. Filters use camelCase field names with one of three
+# timestamp shapes; see FILTER_FIELDS below.
 DATA_TYPES = {
     "daily_steps": "steps",
     "daily_active_calories": "total-calories",
@@ -35,6 +35,31 @@ DATA_TYPES = {
     "sleep_session": "sleep",
     "workout": "exercise",
 }
+
+# Per-endpoint filter grammar. Each entry: (filter field path, timestamp format).
+# "civil"   → naive ISO8601 date-time, quoted: "2026-04-22T00:00:00"
+# "date"    → ISO date only, quoted:          "2026-04-22"
+# "rfc3339" → UTC RFC3339 with Z, quoted:     "2026-04-22T00:00:00Z"
+FILTER_FIELDS: dict[str, tuple[str, str]] = {
+    "steps":                    ("steps.interval.civil_start_time",             "civil"),
+    "total-calories":           ("totalCalories.interval.civil_start_time",     "civil"),
+    "weight":                   ("weight.sample_time.civil_time",               "civil"),
+    "body-fat":                 ("bodyFat.sample_time.civil_time",              "civil"),
+    "daily-resting-heart-rate": ("dailyRestingHeartRate.date",                  "date"),
+    "heart-rate":               ("heartRate.sample_time.physical_time",         "rfc3339"),
+    "sleep":                    ("sleep.interval.civil_end_time",               "civil"),
+    "exercise":                 ("exercise.interval.civil_start_time",          "civil"),
+}
+
+
+def _fmt_filter_ts(dt: datetime.datetime, fmt: str) -> str:
+    if fmt == "date":
+        return dt.date().isoformat()
+    if fmt == "civil":
+        return dt.replace(tzinfo=None).isoformat(timespec="seconds")
+    if fmt == "rfc3339":
+        return dt.replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
+    raise ValueError(f"unknown filter timestamp format: {fmt}")
 
 
 class GoogleHealthError(Exception):
@@ -118,11 +143,11 @@ class GoogleHealthClient:
         until: datetime.datetime | None = None,
     ) -> AsyncIterator[dict]:
         url = f"{BASE_URL}/{API_VERSION}/users/me/dataTypes/{data_type}/dataPoints"
-        params = {
-            "startTime": since.isoformat() + "Z",
-        }
+        field, fmt = FILTER_FIELDS[data_type]
+        filter_parts = [f'{field} >= "{_fmt_filter_ts(since, fmt)}"']
         if until is not None:
-            params["endTime"] = until.isoformat() + "Z"
+            filter_parts.append(f'{field} < "{_fmt_filter_ts(until, fmt)}"')
+        params = {"filter": " AND ".join(filter_parts)}
         headers = {"Authorization": f"Bearer {self._token}"}
         page_token = None
         while True:
@@ -132,8 +157,13 @@ class GoogleHealthClient:
             if resp.status_code == 429:
                 raise RateLimited("Google Health API rate limit")
             if resp.status_code >= 500:
-                raise GoogleHealthError(f"Google Health 5xx: {resp.status_code}")
-            resp.raise_for_status()
+                raise GoogleHealthError(
+                    f"Google Health 5xx: {resp.status_code} body={resp.text[:500]}"
+                )
+            if resp.status_code >= 400:
+                raise GoogleHealthError(
+                    f"Google Health {resp.status_code} for {data_type}: {resp.text[:500]}"
+                )
             body = resp.json()
             for point in body.get("dataPoints", []):
                 yield point
