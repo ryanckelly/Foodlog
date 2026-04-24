@@ -22,15 +22,18 @@ import httpx
 BASE_URL = "https://health.googleapis.com"
 API_VERSION = "v4"
 
+# Verified against https://developers.google.com/health/data-types — endpoints use
+# kebab-case in the URL path (filter params use snake_case instead; see note in
+# _paginate). Update here if Google renames a type.
 DATA_TYPES = {
-    "daily_steps": "DAILY_STEPS",
-    "daily_active_calories": "DAILY_ACTIVE_CALORIES",
-    "body_weight": "BODY_WEIGHT",
-    "body_fat": "BODY_FAT_PERCENT",
-    "resting_heart_rate": "RESTING_HEART_RATE",
-    "heart_rate_sample": "HEART_RATE",
-    "sleep_session": "SLEEP_SESSION",
-    "workout": "EXERCISE_SESSION",
+    "daily_steps": "steps",
+    "daily_active_calories": "total-calories",
+    "body_weight": "weight",
+    "body_fat": "body-fat",
+    "resting_heart_rate": "daily-resting-heart-rate",
+    "heart_rate_sample": "heart-rate",
+    "sleep_session": "sleep",
+    "workout": "exercise",
 }
 
 

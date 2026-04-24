@@ -22,10 +22,10 @@ def http():
 
 async def test_list_daily_activity_returns_normalized_rows(http):
     with respx.mock(base_url="https://health.googleapis.com") as mock:
-        mock.get(url__regex=r".*/DAILY_STEPS/dataPoints.*").mock(
+        mock.get(url__regex=r".*/steps/dataPoints.*").mock(
             return_value=httpx.Response(200, json=_load("daily_activity.json"))
         )
-        mock.get(url__regex=r".*/DAILY_ACTIVE_CALORIES/dataPoints.*").mock(
+        mock.get(url__regex=r".*/total-calories/dataPoints.*").mock(
             return_value=httpx.Response(200, json={"dataPoints": [], "nextPageToken": ""})
         )
         client = GoogleHealthClient(http, access_token="test")
@@ -40,10 +40,10 @@ async def test_list_daily_activity_returns_normalized_rows(http):
 
 async def test_list_body_composition_returns_normalized_rows(http):
     with respx.mock(base_url="https://health.googleapis.com") as mock:
-        mock.get(url__regex=r".*/BODY_WEIGHT/dataPoints.*").mock(
+        mock.get(url__regex=r".*/weight/dataPoints.*").mock(
             return_value=httpx.Response(200, json=_load("body_composition.json"))
         )
-        mock.get(url__regex=r".*/BODY_FAT_PERCENT/dataPoints.*").mock(
+        mock.get(url__regex=r".*/body-fat/dataPoints.*").mock(
             return_value=httpx.Response(200, json={"dataPoints": [], "nextPageToken": ""})
         )
         client = GoogleHealthClient(http, access_token="test")
@@ -60,7 +60,7 @@ async def test_list_handles_pagination(http):
         page1 = {
             "dataPoints": [{
                 "name": "users/me/dataPoints/p1",
-                "dataType": "DAILY_STEPS",
+                "dataType": "steps",
                 "startTime": "2026-04-22T00:00:00Z",
                 "endTime": "2026-04-23T00:00:00Z",
                 "value": {"intValue": 100},
@@ -71,7 +71,7 @@ async def test_list_handles_pagination(http):
         page2 = {
             "dataPoints": [{
                 "name": "users/me/dataPoints/p2",
-                "dataType": "DAILY_STEPS",
+                "dataType": "steps",
                 "startTime": "2026-04-23T00:00:00Z",
                 "endTime": "2026-04-24T00:00:00Z",
                 "value": {"intValue": 200},
@@ -79,13 +79,13 @@ async def test_list_handles_pagination(http):
             }],
             "nextPageToken": "",
         }
-        mock.get(url__regex=r".*/DAILY_STEPS/dataPoints.*").mock(
+        mock.get(url__regex=r".*/steps/dataPoints.*").mock(
             side_effect=[
                 httpx.Response(200, json=page1),
                 httpx.Response(200, json=page2),
             ]
         )
-        mock.get(url__regex=r".*/DAILY_ACTIVE_CALORIES/dataPoints.*").mock(
+        mock.get(url__regex=r".*/total-calories/dataPoints.*").mock(
             return_value=httpx.Response(200, json={"dataPoints": [], "nextPageToken": ""})
         )
         client = GoogleHealthClient(http, access_token="test")
@@ -99,7 +99,7 @@ async def test_list_handles_pagination(http):
 async def test_429_raises_rate_limited(http):
     from foodlog.clients.google_health import RateLimited
     with respx.mock(base_url="https://health.googleapis.com") as mock:
-        mock.get(url__regex=r".*/DAILY_STEPS/dataPoints.*").mock(
+        mock.get(url__regex=r".*/steps/dataPoints.*").mock(
             return_value=httpx.Response(429)
         )
         client = GoogleHealthClient(http, access_token="test")

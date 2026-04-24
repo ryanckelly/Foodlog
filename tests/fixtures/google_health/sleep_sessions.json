@@ -2,7 +2,7 @@
   "dataPoints": [
     {
       "name": "users/me/dataPoints/sleep-2026-04-22",
-      "dataType": "SLEEP_SESSION",
+      "dataType": "sleep",
       "startTime": "2026-04-21T23:15:00Z",
       "endTime": "2026-04-22T06:30:00Z",
       "value": {},
