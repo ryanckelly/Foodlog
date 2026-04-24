@@ -81,3 +81,6 @@
         <div class="empty">Nothing logged for this period</div>
     {% endif %}
 </section>
+{% if include_movement %}
+  {% include "dashboard/movement_partial.html" %}
+{% endif %}

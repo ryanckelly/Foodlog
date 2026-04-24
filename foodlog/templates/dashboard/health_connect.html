@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="connect-prompt">
+  <h1>Connect Google Health</h1>
+  <p>Link your Google Health account to import your Pixel Watch activity, Renpho weight readings, and sleep data into the FoodLog dashboard.</p>
+  <a href="/health/connect" class="primary-btn">Connect Google Health</a>
+  <p class="fine-print">
+    FoodLog will read-only access your fitness, body composition, and sleep data.
+    You can revoke this at any time from
+    <a href="https://myaccount.google.com/permissions">Google account permissions</a>.
+  </p>
+</section>
+{% endblock %}

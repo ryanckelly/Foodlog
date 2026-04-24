@@ -1,0 +1,52 @@
+{# Movement & Recovery section — rendered below the meals list. #}
+<section class="movement-section">
+  <div class="section-head">
+    <h2>Movement &amp; Recovery</h2>
+  </div>
+
+  {% if not workouts and not sleep and not weight %}
+    <div class="empty">No movement or recovery data for this period</div>
+  {% else %}
+    <div class="movement-cards">
+      {% for w in workouts %}
+        <div class="mv-card">
+          <div class="mv-card-title">{{ w.activity_type }}{% if w.distance_km %} · {{ w.distance_km }} km{% endif %}</div>
+          <div class="mv-card-big">{{ w.duration_min }} <span class="mv-card-sub">min</span></div>
+          <div class="mv-hr-chart" aria-hidden="true">
+            {% for s in w.hr_samples %}<span style="height:{{ s.pct }}%"></span>{% endfor %}
+          </div>
+          <div class="mv-card-sub">
+            {% if w.calories_kcal %}{{ w.calories_kcal|round|int }} kcal{% endif %}
+            {% if w.avg_hr %} · avg {{ w.avg_hr }}{% endif %}
+            {% if w.max_hr %} · peak {{ w.max_hr }}{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+
+      {% if sleep %}
+        <div class="mv-card">
+          <div class="mv-card-title">Sleep last night</div>
+          <div class="mv-card-big">{{ (sleep.duration_min // 60) }}h {{ "%02d"|format(sleep.duration_min % 60) }}m</div>
+          <div class="mv-card-sub">
+            {% if sleep.duration_min < 420 %}below 7h target{% else %}on target{% endif %}
+            {% if sleep.resting_hr %} · resting hr {{ sleep.resting_hr }}{% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if weight %}
+        <div class="mv-card">
+          <div class="mv-card-title">Weight</div>
+          <div class="mv-card-big">{{ "%.1f"|format(weight.weight_kg) }} <span class="mv-card-sub">kg</span></div>
+          <div class="mv-card-sub">
+            {% if weight.delta_kg is not none %}
+              {% if weight.delta_kg < 0 %}{{ "%.1f"|format(weight.delta_kg) }} kg this week
+              {% else %}+{{ "%.1f"|format(weight.delta_kg) }} kg this week{% endif %}
+            {% endif %}
+            {% if weight.body_fat_pct %} · body fat {{ "%.1f"|format(weight.body_fat_pct) }}%{% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
