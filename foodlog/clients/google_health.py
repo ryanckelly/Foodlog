@@ -4,20 +4,34 @@ One method per logical data category. Each returns an async iterator
 of normalized dataclasses so the sync service can upsert row-by-row
 without loading full pages into memory.
 
-TODO(deployment): The DATA_TYPES map below uses placeholder identifiers
-for each Google Health data type. Before the first production sync, confirm
-each value against https://developers.google.com/health/reference/rest/v4
-and the Google Cloud Console "Data Types" page. If Google renames a type,
-update the DATA_TYPES map — not the call sites. The tests mock URLs by
-regex against these identifiers; update fixtures too if names change.
+Status per data type (as of first-sync exploration against live API):
+    sleep               — ✓ implemented against real response shape
+    steps               — ⚠ API returns minute-level samples (needs daily aggregation);
+                           current parser assumes shape the API doesn't emit
+    total-calories      — ✗ API rejects `list` action (requires `rollup` / `dailyRollup`);
+                           different endpoint path than other types
+    heart-rate, daily-resting-heart-rate
+                        — ✗ filter field paths per Google docs return
+                           "does not match any data type"; filter grammar
+                           for these types is undocumented / needs probing
+    weight, body-fat    — ? response shape unconfirmed (no data in test account);
+                           parser follows same assumptions as steps
+    exercise            — ? response shape unconfirmed (no workouts in test window)
+
+All uncertain / known-broken endpoints are wrapped so a per-type failure
+does NOT tank the whole sync — see `_paginate` (logs + empty) and
+`HealthSyncService._sync_*` (per-type try/except + log + continue).
 """
 from __future__ import annotations
 
 import datetime
+import logging
 from dataclasses import dataclass
 from typing import AsyncIterator
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://health.googleapis.com"
 API_VERSION = "v4"
@@ -131,6 +145,17 @@ def _parse_time(s: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(datetime.UTC).replace(tzinfo=None)
 
 
+def _source_from(data_source: dict) -> str:
+    """Extract a human-readable source label from Google's nested dataSource.
+
+    Prefers the device display name ("Pixel Watch 3"), falls back to platform
+    ("FITBIT"), then empty string. Google stopped emitting `originDataSource`
+    at the top level of each point in the v4 shape.
+    """
+    device = (data_source.get("device") or {})
+    return device.get("displayName") or data_source.get("platform") or ""
+
+
 class GoogleHealthClient:
     def __init__(self, http: httpx.AsyncClient, access_token: str):
         self._http = http
@@ -161,9 +186,13 @@ class GoogleHealthClient:
                     f"Google Health 5xx: {resp.status_code} body={resp.text[:500]}"
                 )
             if resp.status_code >= 400:
-                raise GoogleHealthError(
-                    f"Google Health {resp.status_code} for {data_type}: {resp.text[:500]}"
+                # Log and stop for this type — don't crash the whole sync.
+                # Caller gets an empty iterator so other types can still run.
+                logger.warning(
+                    "google-health %s returned HTTP %d: %s",
+                    data_type, resp.status_code, resp.text[:500],
                 )
+                return
             body = resp.json()
             for point in body.get("dataPoints", []):
                 yield point
@@ -231,15 +260,28 @@ class GoogleHealthClient:
     async def list_sleep_sessions(
         self, since: datetime.datetime, until: datetime.datetime | None = None,
     ) -> AsyncIterator[SleepSessionRow]:
+        # Real shape (v4): pt = {
+        #   "name": "users/.../dataPoints/<id>",
+        #   "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+        #   "sleep": {"interval": {"startTime": "...Z", "endTime": "...Z"}, "stages": [...]}
+        # }
         async for pt in self._paginate(DATA_TYPES["sleep_session"], since, until):
-            start = _parse_time(pt["startTime"])
-            end = _parse_time(pt["endTime"])
+            sleep = pt.get("sleep") or {}
+            interval = sleep.get("interval") or {}
+            start_s = interval.get("startTime")
+            end_s = interval.get("endTime")
+            name = pt.get("name")
+            if not (start_s and end_s and name):
+                logger.warning("google-health sleep point missing fields: %r", pt)
+                continue
+            start = _parse_time(start_s)
+            end = _parse_time(end_s)
             yield SleepSessionRow(
-                external_id=pt["name"],
+                external_id=name,
                 start_at=start,
                 end_at=end,
                 duration_min=int((end - start).total_seconds() // 60),
-                source=pt.get("originDataSource", ""),
+                source=_source_from(pt.get("dataSource") or {}),
             )
 
     async def list_workouts(

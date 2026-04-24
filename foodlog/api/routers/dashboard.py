@@ -1,8 +1,11 @@
 import datetime
+import logging
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+
+logger = logging.getLogger(__name__)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -237,6 +240,7 @@ async def feed_partial(
         except (TokenInvalid, TokenMissing):
             reconnect_needed = True
         except Exception:
+            logger.exception("unexpected error running google health sync")
             stale = True
             include_movement = True  # render whatever's in the DB
         if include_movement:

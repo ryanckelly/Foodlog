@@ -7,8 +7,9 @@ Runs synchronously inside a dashboard request handler.
 from __future__ import annotations
 
 import datetime
+import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -23,6 +24,8 @@ from foodlog.db.models import (
     Workout,
     WorkoutHrSample,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BACKFILL_DAYS = 90
 
@@ -55,21 +58,50 @@ class HealthSyncService:
         self._client = client
 
     async def sync_all(self) -> SyncResult:
+        """Run every per-type sync. One failing type must NOT kill the others —
+        Google Health's data types have per-type quirks (unsupported `list`
+        action, different filter grammar, different response shapes) and we
+        want a partial success to still populate the dashboard."""
         result = SyncResult()
+
+        async def _run(name: str, fn: Callable[[], Awaitable[int]]) -> None:
+            try:
+                result.rows_upserted[name] = await fn()
+            except RateLimited:
+                result.ok = False
+                result.rate_limited = True
+                logger.warning("health sync rate-limited on %s", name)
+            except GoogleHealthError as e:
+                result.ok = False
+                result.server_error = True
+                logger.warning("health sync google-error on %s: %s", name, e)
+            except Exception:
+                # Parser mismatch, KeyError on unexpected response shape, etc.
+                result.ok = False
+                logger.exception("health sync crashed on %s (continuing)", name)
+
+        await _run("daily_activity", self._sync_daily_activity)
+        await _run("body_composition", self._sync_body_composition)
+        await _run("resting_heart_rate", self._sync_resting_hr)
+        await _run("sleep_sessions", self._sync_sleep)
+
+        # workouts + hr_samples are synced together but reported separately.
         try:
-            result.rows_upserted["daily_activity"] = await self._sync_daily_activity()
-            result.rows_upserted["body_composition"] = await self._sync_body_composition()
-            result.rows_upserted["resting_heart_rate"] = await self._sync_resting_hr()
-            result.rows_upserted["sleep_sessions"] = await self._sync_sleep()
             wcount, hrcount = await self._sync_workouts_with_hr()
             result.rows_upserted["workouts"] = wcount
             result.rows_upserted["workout_hr_samples"] = hrcount
         except RateLimited:
             result.ok = False
             result.rate_limited = True
-        except GoogleHealthError:
+            logger.warning("health sync rate-limited on workouts")
+        except GoogleHealthError as e:
             result.ok = False
             result.server_error = True
+            logger.warning("health sync google-error on workouts: %s", e)
+        except Exception:
+            result.ok = False
+            logger.exception("health sync crashed on workouts (continuing)")
+
         return result
 
     # ---------- per-table sync methods ----------
