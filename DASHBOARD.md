@@ -31,3 +31,23 @@ The dashboard does not use a separate client-side API layer. Instead, the Jinja2
 5. **Jinja2:** The template iterates over the grouped entries and renders the HTML, applying specific CSS classes to color-code meals (e.g., `.meal-breakfast`, `.meal-lunch`).
 
 This architecture ensures the dashboard shares the exact same business logic and data persistence layer as the REST API and the MCP endpoint.
+
+## Google Health (Movement & Recovery)
+
+The dashboard can surface Pixel Watch / Renpho data alongside meals via the Google Health API. The integration is opt-in, on-presence (no background scheduler), and uses the same Google OAuth client as SSO.
+
+### Setup
+
+1. Set `FOODLOG_GOOGLE_TOKEN_KEY` in `.env`. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. This encrypts the refresh token at rest.
+2. In Google Cloud Console, add `${FOODLOG_PUBLIC_BASE_URL}/health/connect/callback` as an authorized redirect URI on the existing SSO OAuth client, enable the Google Health API, and add the three `googlehealth.*.readonly` scopes to the consent screen.
+3. After SSO login, click **Connect Google Health** on the dashboard. The callback persists an encrypted refresh token in the singleton `google_oauth_token` row.
+4. Confirm the `DATA_TYPES` identifiers in `foodlog/clients/google_health.py` against the live Google Health REST API reference before the first real sync — the defaults are placeholders.
+
+### Flow
+
+* `/dashboard/feed` checks `google_health_configured` and the presence of the `google_oauth_token` row. If configured but unconnected, it renders `dashboard/health_connect.html` instead of the meals feed.
+* If the stored refresh token is older than `REAUTH_AGE_DAYS` (5) it returns an empty body with `HX-Redirect: /health/connect` so the dashboard bounces through Google for a silent re-consent before Google's 7-day Testing-mode wall.
+* Otherwise it mints an access token, runs `HealthSyncService.sync_all()`, then renders the **Movement & Recovery** section from local DB rows (`daily_activity`, `body_composition`, `resting_heart_rate`, `sleep_sessions`, `workouts`, `workout_hr_samples`). A net-calories badge appears in the summary when active calories are present.
+* `TokenInvalid` / `TokenMissing` → reconnect banner. Other exceptions → "data may be stale" flag but the section still renders from cached DB data.
+
+Session gate: `/health/connect` and `/health/connect/callback` require an active SSO session and reject any Google identity that doesn't match `FOODLOG_AUTHORIZED_EMAIL`.
