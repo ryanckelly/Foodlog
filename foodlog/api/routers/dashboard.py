@@ -266,4 +266,8 @@ async def feed_partial(
             "net_calories": net_calories,
             **movement_ctx,
         },
+        # Tell Cloudflare / upstream proxies NOT to rewrite or minify the body.
+        # CF Auto Minify was silently dropping the Movement & Recovery partial
+        # when it ran on this endpoint's HTML.
+        headers={"Cache-Control": "private, no-store, no-transform"},
     )
