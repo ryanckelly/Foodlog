@@ -1,3 +1,11 @@
+{% if reconnect_needed %}
+  <div class="reconnect-banner">
+    Your Google Health connection expired.
+    <a href="/health/connect">Reconnect</a> to resume syncing.
+  </div>
+{% elif stale %}
+  <div class="reconnect-banner stale">Health data may be stale (sync failed)</div>
+{% endif %}
 <section class="summary">
     <div class="summary-row">
         <div class="summary-kcal">
@@ -22,6 +30,13 @@
             </span>
         </div>
     </div>
+
+    {% if net_calories is not none %}
+    <div class="net-badge" aria-label="net calories">
+      net {{ net_calories|round|int }}
+      · burned {{ total_burned|round|int }}
+    </div>
+    {% endif %}
 
     {% if course_count > 0 %}
     <div class="macro-bar" aria-hidden="true">
