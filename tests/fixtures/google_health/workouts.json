@@ -1,19 +1,24 @@
 {
   "dataPoints": [
     {
-      "name": "users/me/dataPoints/workout-2026-04-22-run",
-      "dataType": "exercise",
-      "startTime": "2026-04-22T07:30:00Z",
-      "endTime": "2026-04-22T08:15:00Z",
-      "activityType": "running",
-      "value": {"activityType": "running"},
-      "aggregates": {
-        "caloriesKcal": 412.5,
-        "distanceMeters": 6850.0,
-        "avgHeartRateBpm": 152,
-        "maxHeartRateBpm": 174
-      },
-      "originDataSource": "com.google.android.wearable.app"
+      "name": "users/me/dataTypes/exercise/dataPoints/workout-2026-04-22-run",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "exercise": {
+        "interval": {
+          "startTime": "2026-04-22T07:30:00Z",
+          "startUtcOffset": "-10800s",
+          "endTime": "2026-04-22T08:15:00Z",
+          "endUtcOffset": "-10800s"
+        },
+        "exerciseType": "RUNNING",
+        "displayName": "Morning run",
+        "metricsSummary": {
+          "caloriesKcal": 412.5,
+          "distanceMillimeters": 6850000,
+          "averageHeartRateBeatsPerMinute": 152,
+          "maxHeartRateBeatsPerMinute": 174
+        }
+      }
     }
   ],
   "nextPageToken": ""

@@ -4,10 +4,19 @@
     <h2>Movement &amp; Recovery</h2>
   </div>
 
-  {% if not workouts and not sleep and not weight %}
+  {% if not workouts and not sleep and not weight and not activity %}
     <div class="empty">No movement or recovery data for this period</div>
   {% else %}
     <div class="movement-cards">
+      {% if activity %}
+        <div class="mv-card">
+          <div class="mv-card-title">Steps</div>
+          <div class="mv-card-big">{{ "{:,}".format(activity.steps) }}</div>
+          <div class="mv-card-sub">
+            {% if activity.calories_kcal %}{{ activity.calories_kcal|round|int }} kcal active{% endif %}
+          </div>
+        </div>
+      {% endif %}
       {% for w in workouts %}
         <div class="mv-card">
           <div class="mv-card-title">{{ w.activity_type }}{% if w.distance_km %} · {{ w.distance_km }} km{% endif %}</div>

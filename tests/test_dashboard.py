@@ -111,12 +111,58 @@ def test_feed_connected_renders_movement_section(health_raw_client, db_session):
     ))
     db_session.commit()
 
+    from foodlog.services.health_sync import SyncResult
     with patch("foodlog.api.routers.dashboard._run_health_sync",
-               new=AsyncMock(return_value=None)):
+               new=AsyncMock(return_value=SyncResult(ok=True))):
         resp = health_raw_client.get("/dashboard/feed?date_range=today")
 
     assert resp.status_code == 200
     assert "Movement" in resp.text
+    # Happy path: no stale / rate-limited banner text.
+    assert "rate limited" not in resp.text
+    assert "sync failed" not in resp.text
+
+
+def test_feed_rate_limited_shows_rate_limited_banner(health_raw_client, db_session):
+    _login_health(health_raw_client)
+
+    fernet = Fernet(settings.foodlog_google_token_key.encode())
+    db_session.add(GoogleOAuthToken(
+        id=1,
+        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
+        scopes_json="[]",
+        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
+    ))
+    db_session.commit()
+
+    from foodlog.services.health_sync import SyncResult
+    with patch("foodlog.api.routers.dashboard._run_health_sync",
+               new=AsyncMock(return_value=SyncResult(ok=False, rate_limited=True))):
+        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    assert "rate limited" in resp.text.lower()
+
+
+def test_feed_server_error_shows_stale_banner(health_raw_client, db_session):
+    _login_health(health_raw_client)
+
+    fernet = Fernet(settings.foodlog_google_token_key.encode())
+    db_session.add(GoogleOAuthToken(
+        id=1,
+        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
+        scopes_json="[]",
+        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
+    ))
+    db_session.commit()
+
+    from foodlog.services.health_sync import SyncResult
+    with patch("foodlog.api.routers.dashboard._run_health_sync",
+               new=AsyncMock(return_value=SyncResult(ok=False, server_error=True))):
+        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    assert "sync failed" in resp.text.lower()
 
 
 def test_feed_old_token_triggers_opportunistic_reauth(health_raw_client, db_session):

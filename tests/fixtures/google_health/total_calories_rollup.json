@@ -10,7 +10,7 @@
         "time": {"hours": 23, "minutes": 59, "seconds": 59}
       },
       "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
-      "steps": {"countSum": "8432"}
+      "totalCalories": {"energyKcalSum": 512.5}
     }
   ]
 }

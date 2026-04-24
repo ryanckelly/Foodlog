@@ -21,7 +21,7 @@ from foodlog.db.models import (
     Workout,
 )
 from foodlog.services.google_token import GoogleTokenService, TokenInvalid, TokenMissing
-from foodlog.services.health_sync import HealthSyncService
+from foodlog.services.health_sync import HealthSyncService, SyncResult
 from foodlog.services.logging import EntryService
 from foodlog.services.nutrition import SummaryService
 
@@ -31,14 +31,18 @@ templates = Jinja2Templates(directory="foodlog/templates")
 REAUTH_AGE_DAYS = 5  # spec: opportunistic re-auth before Google's 7-day wall
 
 
-async def _run_health_sync(db: Session) -> None:
-    """Trigger on-presence sync. Raises TokenInvalid or TokenMissing on auth failure."""
+async def _run_health_sync(db: Session) -> SyncResult:
+    """Trigger on-presence sync. Raises TokenInvalid or TokenMissing on auth failure.
+
+    Returns a SyncResult so the caller can distinguish partial failures
+    (rate-limited vs server-error) for UI banner copy.
+    """
     token_svc = GoogleTokenService(db)
     async with httpx.AsyncClient(timeout=15.0) as http:
         access = await token_svc.mint_access_token(http)
         client = GoogleHealthClient(http, access_token=access.value)
         sync = HealthSyncService(db, client)
-        await sync.sync_all()
+        return await sync.sync_all()
 
 
 def _is_connected(db: Session) -> bool:
@@ -113,10 +117,20 @@ def _build_movement_context(db: Session, start_date, end_date) -> dict:
                   .filter(DailyActivity.date >= start_date,
                           DailyActivity.date <= end_date).all())
     total_burned = sum(a.active_calories_kcal for a in activity) if activity else None
+    total_steps = sum(a.steps for a in activity) if activity else 0
+    # Steps "card" shows when there's activity for the period. Distinct from
+    # the net-calories pill in the summary strip (which is aggregate).
+    activity_view = None
+    if activity:
+        activity_view = {
+            "steps": total_steps,
+            "calories_kcal": total_burned or 0,
+        }
     return {
         "workouts": workout_views,
         "sleep": sleep_view,
         "weight": weight_view,
+        "activity": activity_view,
         "total_burned": total_burned,
     }
 
@@ -231,12 +245,17 @@ async def feed_partial(
     # Health sync (on-presence)
     reconnect_needed = False
     stale = False
+    rate_limited = False
     include_movement = False
     movement_ctx = {}
     if settings.google_health_configured and _is_connected(db):
         try:
-            await _run_health_sync(db)
+            result = await _run_health_sync(db)
             include_movement = True
+            if not result.ok:
+                # Partial failure — render DB content plus a banner.
+                stale = True
+                rate_limited = result.rate_limited
         except (TokenInvalid, TokenMissing):
             reconnect_needed = True
         except Exception:
@@ -263,6 +282,7 @@ async def feed_partial(
             "include_movement": include_movement,
             "reconnect_needed": reconnect_needed,
             "stale": stale,
+            "rate_limited": rate_limited,
             "net_calories": net_calories,
             **movement_ctx,
         },

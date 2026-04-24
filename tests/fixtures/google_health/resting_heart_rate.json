@@ -1,12 +1,12 @@
 {
   "dataPoints": [
     {
-      "name": "users/me/dataPoints/rhr-2026-04-22",
-      "dataType": "daily-resting-heart-rate",
-      "startTime": "2026-04-22T06:00:00Z",
-      "endTime": "2026-04-22T06:00:00Z",
-      "value": {"intValue": 58},
-      "originDataSource": "com.google.android.wearable.app"
+      "name": "users/me/dataTypes/daily-resting-heart-rate/dataPoints/drhr-1",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyRestingHeartRate": {
+        "date": {"year": 2026, "month": 4, "day": 22},
+        "beatsPerMinute": 54
+      }
     }
   ],
   "nextPageToken": ""

@@ -1,14 +1,14 @@
 {
   "dataPoints": [
     {
-      "name": "users/me/dataTypes/weight/dataPoints/bc-1",
+      "name": "users/me/dataTypes/body-fat/dataPoints/bf-1",
       "dataSource": {"device": {"displayName": "Renpho Scale"}, "platform": "FITBIT"},
-      "weight": {
+      "bodyFat": {
         "sampleTime": {
           "physicalTime": "2026-04-22T07:03:00Z",
           "utcOffset": "-10800s"
         },
-        "weightGrams": 81400
+        "percentage": 22.4
       }
     }
   ],

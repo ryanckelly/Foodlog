@@ -3,6 +3,8 @@
     Your Google Health connection expired.
     <a href="/health/connect">Reconnect</a> to resume syncing.
   </div>
+{% elif rate_limited %}
+  <div class="reconnect-banner stale">Health data rate limited — retry in a moment</div>
 {% elif stale %}
   <div class="reconnect-banner stale">Health data may be stale (sync failed)</div>
 {% endif %}

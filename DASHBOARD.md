@@ -48,6 +48,29 @@ The dashboard can surface Pixel Watch / Renpho data alongside meals via the Goog
 * `/dashboard/feed` checks `google_health_configured` and the presence of the `google_oauth_token` row. If configured but unconnected, it renders `dashboard/health_connect.html` instead of the meals feed.
 * If the stored refresh token is older than `REAUTH_AGE_DAYS` (5) it returns an empty body with `HX-Redirect: /health/connect` so the dashboard bounces through Google for a silent re-consent before Google's 7-day Testing-mode wall.
 * Otherwise it mints an access token, runs `HealthSyncService.sync_all()`, then renders the **Movement & Recovery** section from local DB rows (`daily_activity`, `body_composition`, `resting_heart_rate`, `sleep_sessions`, `workouts`, `workout_hr_samples`). A net-calories badge appears in the summary when active calories are present.
-* `TokenInvalid` / `TokenMissing` → reconnect banner. Other exceptions → "data may be stale" flag but the section still renders from cached DB data.
+* `TokenInvalid` / `TokenMissing` → reconnect banner. Transient Google errors on non-brittle types → "data may be stale" flag but the section still renders from cached DB data. Errors on brittle types (currently: `sleep_sessions`) are logged at INFO and do **not** flip the stale banner — see below.
 
 Session gate: `/health/connect` and `/health/connect/callback` require an active SSO session and reject any Google identity that doesn't match `FOODLOG_AUTHORIZED_EMAIL`.
+
+### Per-type request style (source of truth in `foodlog/clients/google_health.py`)
+
+Google's v4 data types split across two endpoint styles and require careful filter-grammar choices. Discovered empirically against the live API on 2026-04-24:
+
+| Type | Endpoint | Request style | Filter field (if `list`) | Notes |
+|---|---|---|---|---|
+| `daily_steps` | `steps` | `:dailyRollUp` POST | n/a | Returns `steps.countSum` (string) per civil day. `list` action returns minute-level samples — don't use for daily totals. |
+| `daily_active_calories` | `total-calories` | `:dailyRollUp` POST | n/a | Returns `totalCalories.kcalSum` (float) per civil day. `list` action is **unsupported** by Google. |
+| `body_weight` | `weight` | `list` GET | `weight.sample_time.civil_time` | Value at `weight.weightGrams` — divide by 1000 for kg. |
+| `body_fat` | `body-fat` | `list` GET | `body_fat.sample_time.civil_time` | Value at `bodyFat.percentage`. |
+| `resting_heart_rate` | `daily-resting-heart-rate` | `list` GET | `daily_resting_heart_rate.date` | Value at `dailyRestingHeartRate.beatsPerMinute`. |
+| `heart_rate_sample` | `heart-rate` | `list` GET | `heart_rate.sample_time.physical_time` | Value at `heartRate.beatsPerMinute`. |
+| `sleep_session` | `sleep` | `list` GET | `sleep.interval.civil_end_time` | Brittle — Google 500s intermittently; marked brittle in `sync_all`. |
+| `workout` | `exercise` | `list` GET | `exercise.interval.civil_start_time` | No max-HR aggregate; derived from HR samples. `displayName` preferred over `exerciseType` for UI. |
+
+**Filter-grammar gotcha:** the filter path prefix uses the **snake_case** form of the data type name (`body_fat`, `heart_rate`, `daily_resting_heart_rate`, `total_calories`), **not** camelCase. Google's docs are misleading on this — camelCase prefixes return `INVALID_DATA_POINT_FILTER_DATA_TYPE_MEMBER`. `FILTER_FIELDS` in the client is the single source of truth.
+
+### Concurrency notes
+
+* `HealthSyncService` methods **drain each async iterator into a list before opening a write transaction**. Holding a SQLite write transaction across Google HTTP calls caused `OperationalError: database is locked` when two dashboard requests overlapped. Keep this pattern if you add new per-type methods.
+* Heart-rate samples paginate at ~50 per page. For any workout whose HR samples are already in DB, `_sync_workouts_with_hr` skips the refetch — otherwise a single dashboard hit can spawn dozens of HTTP calls per workout.
+* Sleep cursor uses a fixed 3-day look-back instead of `cursor_for()`. The list endpoint 500s intermittently on this account for wider windows; narrower is safer and upserts are idempotent.
