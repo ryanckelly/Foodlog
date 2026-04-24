@@ -19,6 +19,7 @@ The dashboard is built directly into the existing FastAPI backend using Server-S
 * **HTML Templating:** Jinja2 templates (`foodlog/templates/`) rendered on the server.
 * **Interactivity:** HTMX for dynamic content updates (like changing date ranges) without full page reloads.
 * **Styling:** Inline CSS in `base.html` driven by CSS custom properties, with Inter loaded from Google Fonts. The visual language is a Notion-inspired design system — full spec in `DESIGN.md` at the repo root. When changing palette, typography, or component patterns, update `DESIGN.md` alongside the templates so the spec stays authoritative.
+* **PWA install:** The dashboard is installable to a phone home screen. `foodlog/static/manifest.webmanifest` declares name, icons, theme color (`#0075de`), and `start_url=/dashboard`; `foodlog/static/sw.js` is a no-op service worker that exists only to satisfy the install criteria (no caching, no offline). On Android Chrome, an Install prompt appears in the address bar / menu. On iOS Safari, use Share → Add to Home Screen. The app launches in `display: standalone`. Manifest, `/sw.js`, and `/static/*` are exempt from `OAuthResourceMiddleware` so browsers can fetch them during install.
 
 ## How it Accesses Data
 
