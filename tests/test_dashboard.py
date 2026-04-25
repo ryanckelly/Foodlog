@@ -12,6 +12,37 @@ from foodlog.config import settings
 from foodlog.db.models import DailyActivity, GoogleOAuthToken
 
 
+@pytest.fixture(autouse=True)
+def _reset_dashboard_sync_state():
+    """Banner-state and throttle-state are module globals on the dashboard
+    router. Reset between tests so previous test outcomes can't bleed in."""
+    from foodlog.api.routers import dashboard as dm
+    dm._sync_state.reset()
+    yield
+    dm._sync_state.reset()
+
+
+def _seed_google_token(db_session, age_days: float = 0):
+    fernet = Fernet(settings.foodlog_google_token_key.encode())
+    db_session.add(GoogleOAuthToken(
+        id=1,
+        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
+        scopes_json="[]",
+        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+                   - datetime.timedelta(days=age_days),
+    ))
+    db_session.commit()
+
+
+def _seed_recent_sync(**fields):
+    """Pretend we just finished a sync. Stamps last_at=now so _sync_due()
+    returns False — no background task fires during the test."""
+    from foodlog.api.routers import dashboard as dm
+    dm._sync_state.last_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    for k, v in fields.items():
+        setattr(dm._sync_state, k, v)
+
+
 @pytest.fixture
 def sso_enabled(monkeypatch):
     """Re-enable Google SSO configuration after the autouse fixture clears it."""
@@ -94,14 +125,7 @@ def test_feed_unconnected_shows_connect_prompt(health_raw_client):
 
 def test_feed_connected_renders_movement_section(health_raw_client, db_session):
     _login_health(health_raw_client)
-
-    fernet = Fernet(settings.foodlog_google_token_key.encode())
-    db_session.add(GoogleOAuthToken(
-        id=1,
-        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
-        scopes_json="[]",
-        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
-    ))
+    _seed_google_token(db_session)
     db_session.add(DailyActivity(
         date=datetime.date.today(),
         steps=8432,
@@ -110,11 +134,9 @@ def test_feed_connected_renders_movement_section(health_raw_client, db_session):
         external_id="da-today",
     ))
     db_session.commit()
+    _seed_recent_sync()  # last sync was ok and recent → no background task fires
 
-    from foodlog.services.health_sync import SyncResult
-    with patch("foodlog.api.routers.dashboard._run_health_sync",
-               new=AsyncMock(return_value=SyncResult(ok=True))):
-        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
 
     assert resp.status_code == 200
     assert "Movement" in resp.text
@@ -125,20 +147,10 @@ def test_feed_connected_renders_movement_section(health_raw_client, db_session):
 
 def test_feed_rate_limited_shows_rate_limited_banner(health_raw_client, db_session):
     _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    _seed_recent_sync(last_ok=False, rate_limited=True)
 
-    fernet = Fernet(settings.foodlog_google_token_key.encode())
-    db_session.add(GoogleOAuthToken(
-        id=1,
-        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
-        scopes_json="[]",
-        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
-    ))
-    db_session.commit()
-
-    from foodlog.services.health_sync import SyncResult
-    with patch("foodlog.api.routers.dashboard._run_health_sync",
-               new=AsyncMock(return_value=SyncResult(ok=False, rate_limited=True))):
-        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
 
     assert resp.status_code == 200
     assert "rate limited" in resp.text.lower()
@@ -146,20 +158,10 @@ def test_feed_rate_limited_shows_rate_limited_banner(health_raw_client, db_sessi
 
 def test_feed_server_error_shows_stale_banner(health_raw_client, db_session):
     _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    _seed_recent_sync(last_ok=False, server_error=True)
 
-    fernet = Fernet(settings.foodlog_google_token_key.encode())
-    db_session.add(GoogleOAuthToken(
-        id=1,
-        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
-        scopes_json="[]",
-        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
-    ))
-    db_session.commit()
-
-    from foodlog.services.health_sync import SyncResult
-    with patch("foodlog.api.routers.dashboard._run_health_sync",
-               new=AsyncMock(return_value=SyncResult(ok=False, server_error=True))):
-        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
 
     assert resp.status_code == 200
     assert "sync failed" in resp.text.lower()
@@ -167,16 +169,7 @@ def test_feed_server_error_shows_stale_banner(health_raw_client, db_session):
 
 def test_feed_old_token_triggers_opportunistic_reauth(health_raw_client, db_session):
     _login_health(health_raw_client)
-
-    fernet = Fernet(settings.foodlog_google_token_key.encode())
-    db_session.add(GoogleOAuthToken(
-        id=1,
-        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
-        scopes_json="[]",
-        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
-                   - datetime.timedelta(days=6),
-    ))
-    db_session.commit()
+    _seed_google_token(db_session, age_days=6)
 
     resp = health_raw_client.get("/dashboard/feed?date_range=today")
     assert resp.headers.get("HX-Redirect") == "/health/connect"
@@ -184,21 +177,95 @@ def test_feed_old_token_triggers_opportunistic_reauth(health_raw_client, db_sess
 
 def test_feed_invalid_grant_shows_reconnect_banner(health_raw_client, db_session):
     _login_health(health_raw_client)
+    _seed_google_token(db_session, age_days=1)
+    _seed_recent_sync(last_ok=False, reconnect_needed=True)
 
-    fernet = Fernet(settings.foodlog_google_token_key.encode())
-    db_session.add(GoogleOAuthToken(
-        id=1,
-        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
-        scopes_json="[]",
-        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
-                   - datetime.timedelta(days=1),
-    ))
-    db_session.commit()
-
-    from foodlog.services.google_token import TokenInvalid
-    with patch("foodlog.api.routers.dashboard._run_health_sync",
-               new=AsyncMock(side_effect=TokenInvalid("invalid_grant"))):
-        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
 
     assert resp.status_code == 200
     assert "Reconnect" in resp.text or "reconnect" in resp.text
+
+
+# ── Background-sync behavior ─────────────────────────────────────────────────
+
+
+def test_feed_does_not_use_current_request_to_render_banner(health_raw_client, db_session):
+    """Banner state reflects the *previous* completed sync, not the one this
+    request schedules. So even if the patched sync about to run will report
+    rate-limited, the response we get back is rendered before the background
+    task runs and shows no banner. The state IS updated by the time the
+    TestClient returns (Starlette awaits BackgroundTasks before yielding
+    control), so a follow-up request would surface the banner."""
+    from foodlog.api.routers import dashboard as dm
+    from foodlog.services.health_sync import SyncResult
+
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+
+    with patch("foodlog.api.routers.dashboard._run_health_sync",
+               new=AsyncMock(return_value=SyncResult(ok=False, rate_limited=True))):
+        resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    # First response was rendered with the fresh (ok) state — no banner.
+    assert resp.status_code == 200
+    assert "rate limited" not in resp.text.lower()
+    # But the background task ran and the state now reflects rate-limit.
+    assert dm._sync_state.rate_limited is True
+    assert dm._sync_state.last_ok is False
+
+
+def test_feed_throttles_background_sync_within_interval(health_raw_client, db_session):
+    """Within SYNC_MIN_INTERVAL_S, repeated requests must NOT schedule new
+    background syncs. Toggling Today/Yesterday/7-day shouldn't queue six
+    Google round-trips."""
+    from foodlog.services.health_sync import SyncResult
+
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    _seed_recent_sync()  # last_at = now → _sync_due() False
+
+    sync_mock = AsyncMock(return_value=SyncResult(ok=True))
+    with patch("foodlog.api.routers.dashboard._run_health_sync", new=sync_mock):
+        for _ in range(5):
+            health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert sync_mock.call_count == 0
+
+
+def test_feed_schedules_background_sync_when_due(health_raw_client, db_session):
+    """When last_at is older than the throttle window, the request schedules
+    a background sync. The patched sync runs once and last_at gets refreshed."""
+    from foodlog.api.routers import dashboard as dm
+    from foodlog.services.health_sync import SyncResult
+
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    dm._sync_state.last_at = (
+        datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        - datetime.timedelta(seconds=120)
+    )
+    stale_at = dm._sync_state.last_at
+
+    sync_mock = AsyncMock(return_value=SyncResult(ok=True))
+    with patch("foodlog.api.routers.dashboard._run_health_sync", new=sync_mock):
+        health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert sync_mock.call_count == 1
+    assert dm._sync_state.last_at > stale_at
+
+
+def test_background_sync_records_token_invalid_as_reconnect_needed(
+    health_raw_client, db_session,
+):
+    from foodlog.api.routers import dashboard as dm
+    from foodlog.services.google_token import TokenInvalid
+
+    _login_health(health_raw_client)
+    _seed_google_token(db_session, age_days=1)
+
+    with patch("foodlog.api.routers.dashboard._run_health_sync",
+               new=AsyncMock(side_effect=TokenInvalid("invalid_grant"))):
+        health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert dm._sync_state.reconnect_needed is True
+    assert dm._sync_state.last_ok is False

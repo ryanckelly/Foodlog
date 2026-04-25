@@ -1,15 +1,16 @@
 import datetime
 import logging
+from dataclasses import dataclass
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 logger = logging.getLogger(__name__)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from foodlog.api.dependencies import get_db
+from foodlog.api.dependencies import get_db, get_session_factory_cached
 from foodlog.clients.google_health import GoogleHealthClient
 from foodlog.config import settings
 from foodlog.db.models import (
@@ -29,6 +30,37 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 templates = Jinja2Templates(directory="foodlog/templates")
 
 REAUTH_AGE_DAYS = 5  # spec: opportunistic re-auth before Google's 7-day wall
+SYNC_MIN_INTERVAL_S = 30  # cap how often we hit Google from background sync
+
+
+# Module-level state for the background-sync model.
+#
+# Pre-2026-04-25 the dashboard ran a full Google Health sync inline on every
+# /dashboard/feed render — 1 token mint + 6 sequential Google API calls,
+# adding ~5s of "Loading…" on every page load (and on every date-range
+# toggle). The page now renders straight from the DB and schedules the
+# sync as a FastAPI BackgroundTask so the request never blocks on Google.
+# Banner state (stale / rate-limited / reconnect) reflects the most recent
+# sync attempt rather than the current one.
+@dataclass
+class _SyncState:
+    last_at: datetime.datetime | None = None
+    inflight: bool = False
+    last_ok: bool = True
+    rate_limited: bool = False
+    server_error: bool = False
+    reconnect_needed: bool = False
+
+    def reset(self) -> None:
+        self.last_at = None
+        self.inflight = False
+        self.last_ok = True
+        self.rate_limited = False
+        self.server_error = False
+        self.reconnect_needed = False
+
+
+_sync_state = _SyncState()
 
 
 async def _run_health_sync(db: Session) -> SyncResult:
@@ -43,6 +75,56 @@ async def _run_health_sync(db: Session) -> SyncResult:
         client = GoogleHealthClient(http, access_token=access.value)
         sync = HealthSyncService(db, client)
         return await sync.sync_all()
+
+
+def _sync_due() -> bool:
+    if _sync_state.inflight:
+        return False
+    if _sync_state.last_at is None:
+        return True
+    age_s = (
+        datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - _sync_state.last_at
+    ).total_seconds()
+    return age_s >= SYNC_MIN_INTERVAL_S
+
+
+async def _background_health_sync() -> None:
+    """Run a sync with its own DB session and update _sync_state.
+
+    Scheduled via BackgroundTasks so it runs after the response is sent —
+    the dashboard render never blocks on Google.
+    """
+    if _sync_state.inflight:
+        return
+    _sync_state.inflight = True
+    try:
+        factory = get_session_factory_cached()
+        db = factory()
+        try:
+            try:
+                result = await _run_health_sync(db)
+                _sync_state.last_ok = result.ok
+                _sync_state.rate_limited = result.rate_limited
+                _sync_state.server_error = result.server_error
+                _sync_state.reconnect_needed = False
+            except (TokenInvalid, TokenMissing):
+                _sync_state.last_ok = False
+                _sync_state.rate_limited = False
+                _sync_state.server_error = False
+                _sync_state.reconnect_needed = True
+            except Exception:
+                logger.exception("background health sync crashed")
+                _sync_state.last_ok = False
+                _sync_state.rate_limited = False
+                _sync_state.server_error = True
+                _sync_state.reconnect_needed = False
+        finally:
+            db.close()
+        _sync_state.last_at = (
+            datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        )
+    finally:
+        _sync_state.inflight = False
 
 
 def _is_connected(db: Session) -> bool:
@@ -150,6 +232,7 @@ def index(request: Request):
 @router.get("/feed", response_class=HTMLResponse)
 async def feed_partial(
     request: Request,
+    background_tasks: BackgroundTasks,
     date_range: str = "today",
     db: Session = Depends(get_db),
 ):
@@ -242,28 +325,25 @@ async def feed_partial(
     entry_count = sum(len(g["entries"]) for g in grouped_entries)
     course_count = len(grouped_entries)
 
-    # Health sync (on-presence)
+    # Render movement straight from the DB. The Google sync is fire-and-forget
+    # via BackgroundTasks (see _background_health_sync) so the request never
+    # blocks on Google. Banners reflect the most recent completed sync — they
+    # lag the in-flight sync by one cycle, which is a deliberate trade for the
+    # render-path speedup. See module docstring on _SyncState.
     reconnect_needed = False
     stale = False
     rate_limited = False
     include_movement = False
     movement_ctx = {}
     if settings.google_health_configured and _is_connected(db):
-        try:
-            result = await _run_health_sync(db)
-            include_movement = True
-            if not result.ok:
-                # Partial failure — render DB content plus a banner.
-                stale = True
-                rate_limited = result.rate_limited
-        except (TokenInvalid, TokenMissing):
-            reconnect_needed = True
-        except Exception:
-            logger.exception("unexpected error running google health sync")
+        include_movement = True
+        movement_ctx = _build_movement_context(db, start_date, end_date)
+        reconnect_needed = _sync_state.reconnect_needed
+        if not _sync_state.last_ok and not reconnect_needed:
             stale = True
-            include_movement = True  # render whatever's in the DB
-        if include_movement:
-            movement_ctx = _build_movement_context(db, start_date, end_date)
+            rate_limited = _sync_state.rate_limited
+        if _sync_due():
+            background_tasks.add_task(_background_health_sync)
 
     net_calories = None
     if include_movement and movement_ctx.get("total_burned"):

@@ -35,7 +35,7 @@ This architecture ensures the dashboard shares the exact same business logic and
 
 ## Google Health (Movement & Recovery)
 
-The dashboard can surface Pixel Watch / Renpho data alongside meals via the Google Health API. The integration is opt-in, on-presence (no background scheduler), and uses the same Google OAuth client as SSO.
+The dashboard can surface Pixel Watch / Renpho data alongside meals via the Google Health API. The integration is opt-in, on-presence (no background scheduler), and uses the same Google OAuth client as SSO. Sync is **decoupled from the render path** (see Flow) — the page never blocks on Google.
 
 ### Setup
 
@@ -48,8 +48,10 @@ The dashboard can surface Pixel Watch / Renpho data alongside meals via the Goog
 
 * `/dashboard/feed` checks `google_health_configured` and the presence of the `google_oauth_token` row. If configured but unconnected, it renders `dashboard/health_connect.html` instead of the meals feed.
 * If the stored refresh token is older than `REAUTH_AGE_DAYS` (5) it returns an empty body with `HX-Redirect: /health/connect` so the dashboard bounces through Google for a silent re-consent before Google's 7-day Testing-mode wall.
-* Otherwise it mints an access token, runs `HealthSyncService.sync_all()`, then renders the **Movement & Recovery** section from local DB rows (`daily_activity`, `body_composition`, `resting_heart_rate`, `sleep_sessions`, `workouts`, `workout_hr_samples`). A net-calories badge appears in the summary when active calories are present.
-* `TokenInvalid` / `TokenMissing` → reconnect banner. Transient Google errors on non-brittle types → "data may be stale" flag but the section still renders from cached DB data. Errors on brittle types (currently: `sleep_sessions`) are logged at INFO and do **not** flip the stale banner — see below.
+* Otherwise it renders the **Movement & Recovery** section directly from local DB rows (`daily_activity`, `body_composition`, `resting_heart_rate`, `sleep_sessions`, `workouts`, `workout_hr_samples`) and schedules `HealthSyncService.sync_all()` as a FastAPI `BackgroundTask` to run after the response is sent. A net-calories badge appears in the summary when active calories are present.
+* The background sync is throttled to once per `SYNC_MIN_INTERVAL_S` (30s) via the module-level `_sync_state` in `dashboard.py`, so rapid Today/Yesterday/7-day toggles don't queue parallel Google round-trips. The next due sync fires on the next request after the throttle expires; if no one loads the dashboard, no sync happens (still on-presence).
+* Banner state (`stale` / `rate_limited` / `reconnect_needed`) reflects the **previous** completed sync — it lags the in-flight sync by one cycle. This is a deliberate trade for the render-path speedup: pre-2026-04-25 the inline sync added 4–5s of "Loading…" on every page load, painful on Android over Cloudflare. Tests must seed `_sync_state` directly (`_seed_recent_sync` in `tests/test_dashboard.py`) rather than expecting a single request to both schedule and observe a sync's outcome.
+* `TokenInvalid` / `TokenMissing` raised by the background sync → `_sync_state.reconnect_needed=True` → reconnect banner on the next render. Transient Google errors on non-brittle types → `last_ok=False` → "data may be stale" flag, but the section still renders from cached DB data. Errors on brittle types (currently: `sleep_sessions`) are logged at INFO and do **not** flip the stale banner — see below.
 
 Session gate: `/health/connect` and `/health/connect/callback` require an active SSO session and reject any Google identity that doesn't match `FOODLOG_AUTHORIZED_EMAIL`.
 
