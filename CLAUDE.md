@@ -24,6 +24,8 @@ Claude uses the custom MCP connector URL `https://foodlog.ryanckelly.ca/mcp`. Th
 
 The web dashboard is served at `/dashboard`. It uses Jinja2 templates and HTMX and is gated by Google Single Sign-On (SSO). When `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FOODLOG_SESSION_SECRET_KEY`, `FOODLOG_AUTHORIZED_EMAIL`, and `FOODLOG_PUBLIC_BASE_URL` are all set, unauthenticated dashboard requests redirect to `/login` and only the single authorized email can sign in. When SSO is not configured (any required env var missing), the dashboard is open — intended for local dev only, and the app logs a startup warning. See `DASHBOARD.md` for the full flow.
 
+The dashboard render path **must not block on external APIs**. `/dashboard/feed` renders straight from the local DB and schedules `HealthSyncService.sync_all()` as a FastAPI `BackgroundTask` (throttled to once per `SYNC_MIN_INTERVAL_S`, currently 30s) via the module-level `_sync_state` in `foodlog/api/routers/dashboard.py`. Banner state (`stale` / `rate_limited` / `reconnect_needed`) reflects the **previous** completed sync — it lags the in-flight sync by one cycle, which is a deliberate trade for the render-path speedup (pre-2026-04-25 the inline sync added 4–5s of "Loading…" on every load, painful on Android over Cloudflare). New external integrations on this path should follow the same pattern. Tests for banner behavior must seed `_sync_state` directly rather than expecting a single request to both schedule and observe a sync's outcome — see `_seed_recent_sync` in `tests/test_dashboard.py`.
+
 ## Design System
 
 The dashboard's visual language follows the Notion-inspired design system documented in `DESIGN.md` at the repo root. Key tokens: white canvas (`#ffffff`) with warm-white sunk surface (`#f6f5f4`), `rgba(0,0,0,0.95)` text, Notion Blue (`#0075de`) as the single saturated UI accent, Inter as the only typeface. Meal colors use Notion's semantic accents (orange/green/purple/teal). When editing dashboard templates or adding new UI surfaces, reference `DESIGN.md` for typography scale, shadow system, border radii, and component patterns to stay on-system — do not introduce new accent colors or type families without updating the spec.
@@ -43,3 +45,51 @@ Recent history uses short imperative messages, often with Conventional Commit pr
 ## Security & Configuration Tips
 
 Copy `.env.example` to `.env` for local or Docker runs, but do not commit real secrets. Treat `.env`, `data/foodlog.db`, and Cloudflare tunnel tokens as private runtime state. Only pass the tunnel token into the container as `TUNNEL_TOKEN`; `cloudflared` masks that variable in logs, but it may print arbitrary custom environment variable names. The public surface is Cloudflare Tunnel plus FoodLog OAuth; document any new public hostname, scope, or host-header change clearly.
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd dolt push
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

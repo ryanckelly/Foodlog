@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "foodlog",
+  "project_id": "694210db-75ba-49b6-b0df-c8fd1412bad0"
+}
