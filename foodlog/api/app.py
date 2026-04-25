@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
         return FileResponse(
             STATIC_DIR / "manifest.webmanifest",
             media_type="application/manifest+json",
+            headers={"Cache-Control": "no-cache, must-revalidate"},
         )
 
     @app.get("/sw.js", include_in_schema=False)
