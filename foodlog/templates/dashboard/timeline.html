@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+  <div class="brand">
+    <span class="mark"><span class="dot"></span>FoodLog</span>
+    <span class="date">Timeline · {{ day.strftime('%A, %b %-d') }}</span>
+  </div>
+</header>
+
+<div id="timeline-content">
+  <p>{{ day.isoformat() }}</p>
+</div>
+{% endblock %}
