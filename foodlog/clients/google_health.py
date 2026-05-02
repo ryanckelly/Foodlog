@@ -568,6 +568,36 @@ class GoogleHealthClient:
                 source=_source_from(pt.get("dataSource")),
             )
 
+    async def list_hr_intervals(
+        self,
+        since: datetime.datetime,
+        until: datetime.datetime | None = None,
+    ) -> AsyncIterator[HrIntervalRow]:
+        """15-min HR rollup, chunked at 14-day max range per request."""
+        end = until or datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        chunk_start = since
+        while chunk_start < end:
+            chunk_end = min(chunk_start + datetime.timedelta(days=14), end)
+            for pt in await self._rollup(
+                "heart-rate", chunk_start, chunk_end, window_size_s=900,
+            ):
+                hr = pt.get("heartRate") or {}
+                start_s = pt.get("startTime")
+                if not start_s or hr.get("beatsPerMinuteAvg") is None:
+                    continue
+                try:
+                    yield HrIntervalRow(
+                        start_at=_parse_time(start_s),
+                        bpm_avg=int(round(float(hr["beatsPerMinuteAvg"]))),
+                        bpm_min=int(hr["beatsPerMinuteMin"]),
+                        bpm_max=int(hr["beatsPerMinuteMax"]),
+                        source=_source_from(pt.get("dataSource")),
+                    )
+                except (ValueError, TypeError, KeyError):
+                    logger.warning("google-health hr rollup malformed: %r", pt)
+                    continue
+            chunk_start = chunk_end
+
     async def list_workout_hr_samples(
         self,
         workout_id: str,

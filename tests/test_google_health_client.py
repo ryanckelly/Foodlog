@@ -285,6 +285,30 @@ async def test_rollup_posts_correct_body_and_returns_points():
     assert sent["windowSize"] == "900s"
 
 
+@pytest.mark.asyncio
+async def test_list_hr_intervals_chunks_into_14_day_slices():
+    async with httpx.AsyncClient() as http:
+        with respx.mock(base_url="https://health.googleapis.com") as mock:
+            route = mock.post(url__regex=r".*/heart-rate/dataPoints:rollUp.*").mock(
+                return_value=httpx.Response(200, json=_load("hr_rollup.json"))
+            )
+            client = GoogleHealthClient(http, access_token="test")
+            # 30-day range -> expect three chunks: [0..14], [14..28], [28..30]
+            since = datetime.datetime(2026, 3, 15, 0, 0, 0)
+            until = datetime.datetime(2026, 4, 14, 0, 0, 0)
+            rows = [r async for r in client.list_hr_intervals(since=since, until=until)]
+
+    assert route.call_count == 3
+    # each chunk returns the same 4-row fixture, so total rows = 12
+    assert len(rows) == 12
+    first = rows[0]
+    assert first.bpm_avg == 102  # rounded from 102.3
+    assert first.bpm_min == 88
+    assert first.bpm_max == 121
+    assert first.source == ""  # fixture has no dataSource
+    assert first.start_at == datetime.datetime(2026, 4, 12, 11, 50, 0)
+
+
 async def test_synthesises_external_id_when_name_missing(http):
     """heart-rate samples don't have a top-level name; sleep does, but test
     that the code tolerates missing name on session types."""
