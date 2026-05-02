@@ -9,9 +9,12 @@
 <section class="timeline-section" data-day="{{ day.isoformat() }}">
   <div class="tl-meal-strip">
     {% for m in meal_views %}
-      <span class="tl-meal-dot tl-meal-{{ m.meal_type }}"
-            style="left: {{ '%.2f' % m.left_pct }}%"
-            title="{{ m.name }}"></span>
+      <button type="button"
+              class="tl-meal-dot tl-meal-{{ m.meal_type }}"
+              style="left: {{ '%.2f' % m.left_pct }}%"
+              aria-label="{{ m.meal_type|capitalize }}: {{ m.name }}">
+        <span class="tl-meal-tip">{{ m.name }}</span>
+      </button>
     {% endfor %}
   </div>
 
@@ -24,7 +27,10 @@
   </nav>
 
   <div id="tl-hr" class="tl-panel tl-panel-hr">
-    <div class="tl-panel-label">Heart rate</div>
+    <div class="tl-panel-head">
+      <span class="tl-panel-label">Heart rate</span>
+      <span class="tl-panel-axis">{{ hr_axis }}</span>
+    </div>
     <div class="tl-chart">
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
@@ -50,7 +56,10 @@
   </div>
 
   <div id="tl-steps" class="tl-panel tl-panel-steps">
-    <div class="tl-panel-label">Steps</div>
+    <div class="tl-panel-head">
+      <span class="tl-panel-label">Steps</span>
+      {% if steps_axis %}<span class="tl-panel-axis">{{ steps_axis }}</span>{% endif %}
+    </div>
     <div class="tl-chart">
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
@@ -69,7 +78,10 @@
   </div>
 
   <div id="tl-distance" class="tl-panel tl-panel-distance">
-    <div class="tl-panel-label">Distance</div>
+    <div class="tl-panel-head">
+      <span class="tl-panel-label">Distance</span>
+      {% if dist_axis %}<span class="tl-panel-axis">{{ dist_axis }}</span>{% endif %}
+    </div>
     <div class="tl-chart">
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
@@ -88,7 +100,10 @@
   </div>
 
   <div id="tl-floors" class="tl-panel tl-panel-floors">
-    <div class="tl-panel-label">Floors</div>
+    <div class="tl-panel-head">
+      <span class="tl-panel-label">Floors</span>
+      {% if floors_axis %}<span class="tl-panel-axis">{{ floors_axis }}</span>{% endif %}
+    </div>
     <div class="tl-chart">
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
@@ -107,7 +122,10 @@
   </div>
 
   <div id="tl-azm" class="tl-panel tl-panel-azm">
-    <div class="tl-panel-label">Active zone minutes</div>
+    <div class="tl-panel-head">
+      <span class="tl-panel-label">Active zone minutes</span>
+      {% if azm_axis %}<span class="tl-panel-axis">{{ azm_axis }}</span>{% endif %}
+    </div>
     <div class="tl-chart">
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
@@ -126,6 +144,10 @@
         {% endif %}
       {% endfor %}
     </div>
+  </div>
+
+  <div class="tl-xaxis" aria-hidden="true">
+    <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
   </div>
 </section>
 {% endif %}

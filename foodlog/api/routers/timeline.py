@@ -183,6 +183,21 @@ def timeline(
         or bool(meal_views)
     )
 
+    # Per-panel peak/range labels for the Y-axis.
+    hr_axis = f"{HR_MIN}–{HR_MAX} bpm"
+    steps_peak = max((v for v in steps_slots if v), default=0)
+    steps_axis = f"peak {steps_peak:,}" if steps_peak else ""
+    dist_peak_m = max((v for v in dist_slots if v), default=0.0)
+    if dist_peak_m:
+        peak_mi = dist_peak_m * 0.000621371
+        peak_km = dist_peak_m / 1000.0
+        dist_axis = f"peak {peak_mi:.2f} mi ({peak_km:.2f} km)"
+    else:
+        dist_axis = ""
+    floors_peak = max((v for v in floors_slots if v), default=0)
+    floors_axis = f"peak {floors_peak}" if floors_peak else ""
+    azm_axis = f"peak {azm_peak_total} min" if any(azm_slots) else ""
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard/timeline.html",
@@ -202,6 +217,11 @@ def timeline(
             "azm_slots": azm_slots,
             "workout_views": workout_views,
             "meal_views": meal_views,
+            "hr_axis": hr_axis,
+            "steps_axis": steps_axis,
+            "dist_axis": dist_axis,
+            "floors_axis": floors_axis,
+            "azm_axis": azm_axis,
             "one_day": datetime.timedelta(days=1),
         },
     )
