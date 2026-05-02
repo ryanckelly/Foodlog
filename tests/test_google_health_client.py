@@ -264,6 +264,27 @@ async def test_malformed_point_is_skipped_not_raised(http):
         assert [r.external_id for r in rows] == ["good"]
 
 
+@pytest.mark.asyncio
+async def test_rollup_posts_correct_body_and_returns_points():
+    async with httpx.AsyncClient() as http:
+        with respx.mock(base_url="https://health.googleapis.com") as mock:
+            route = mock.post(
+                url__regex=r".*/heart-rate/dataPoints:rollUp.*"
+            ).mock(
+                return_value=httpx.Response(200, json=_load("hr_rollup.json"))
+            )
+            client = GoogleHealthClient(http, access_token="test")
+            since = datetime.datetime(2026, 4, 12, 11, 50, 0)
+            until = datetime.datetime(2026, 4, 12, 12, 50, 0)
+            points = await client._rollup("heart-rate", since, until, window_size_s=900)
+
+    assert len(points) == 4
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["range"]["startTime"] == "2026-04-12T11:50:00Z"
+    assert sent["range"]["endTime"]   == "2026-04-12T12:50:00Z"
+    assert sent["windowSize"] == "900s"
+
+
 async def test_synthesises_external_id_when_name_missing(http):
     """heart-rate samples don't have a top-level name; sleep does, but test
     that the code tolerates missing name on session types."""

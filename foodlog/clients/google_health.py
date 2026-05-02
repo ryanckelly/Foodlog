@@ -145,6 +145,33 @@ class HrSampleRow:
     bpm: int
 
 
+@dataclass(slots=True)
+class HrIntervalRow:
+    start_at: datetime.datetime
+    bpm_avg: int
+    bpm_min: int
+    bpm_max: int
+    source: str
+
+
+@dataclass(slots=True)
+class ActivityIntervalRow:
+    start_at: datetime.datetime
+    steps: int | None
+    distance_m: float | None
+    floors: int | None
+    source: str
+
+
+@dataclass(slots=True)
+class AzmIntervalRow:
+    start_at: datetime.datetime
+    fat_burn_min: int | None
+    cardio_min: int | None
+    peak_min: int | None
+    source: str
+
+
 def _parse_time(s: str) -> datetime.datetime:
     # Google returns RFC3339 UTC. Strip 'Z' so we store naive UTC.
     return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(datetime.UTC).replace(tzinfo=None)
@@ -260,6 +287,40 @@ class GoogleHealthClient:
         if resp.status_code >= 400:
             logger.warning(
                 "google-health %s dailyRollUp returned HTTP %d: %s",
+                data_type, resp.status_code, resp.text[:500],
+            )
+            return []
+        return resp.json().get("rollupDataPoints", []) or []
+
+    async def _rollup(
+        self,
+        data_type: str,
+        since: datetime.datetime,
+        until: datetime.datetime,
+        window_size_s: int,
+    ) -> list[dict]:
+        """POST :rollUp with RFC3339 time range. Returns rollupDataPoints or []."""
+        url = (
+            f"{BASE_URL}/{API_VERSION}/users/me/dataTypes/{data_type}/"
+            f"dataPoints:rollUp"
+        )
+        body = {
+            "range": {
+                "startTime": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "endTime":   until.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+            "windowSize": f"{window_size_s}s",
+        }
+        resp = await self._http.post(url, json=body, headers=self._auth_header)
+        if resp.status_code == 429:
+            raise RateLimited("Google Health API rate limit")
+        if resp.status_code >= 500:
+            raise GoogleHealthError(
+                f"Google Health 5xx: {resp.status_code} body={resp.text[:500]}"
+            )
+        if resp.status_code >= 400:
+            logger.warning(
+                "google-health %s rollUp returned HTTP %d: %s",
                 data_type, resp.status_code, resp.text[:500],
             )
             return []
