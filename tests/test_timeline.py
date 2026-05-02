@@ -42,3 +42,28 @@ def test_timeline_renders_hr_panel_with_data(db_session):
     assert r.text.count('class="hr-col"') == 3
     # Min and max BPM should be reflected somewhere in the markup
     assert 'data-bpm-avg="110"' in r.text
+
+
+def test_timeline_renders_activity_panels(db_session):
+    from foodlog.api.app import create_app
+    from foodlog.db.models import IntervalActivity
+
+    db_session.add_all([
+        IntervalActivity(
+            start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+            steps=649, distance_m=420.268, floors=None, source="FITBIT",
+        ),
+        IntervalActivity(
+            start_at=datetime.datetime(2026, 4, 12, 12, 15, 0),
+            steps=1462, distance_m=1133.0, floors=5, source="FITBIT",
+        ),
+    ])
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    assert r.text.count('class="steps-col"') == 2
+    assert r.text.count('class="dist-col"') == 2
+    # Only one floors data point (the other has floors=None)
+    assert r.text.count('class="floors-col"') == 1
