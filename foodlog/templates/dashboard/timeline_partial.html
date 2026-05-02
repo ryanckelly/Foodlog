@@ -1,0 +1,83 @@
+<section class="timeline-section">
+  <div class="tl-panel tl-panel-hr">
+    <div class="tl-panel-label">Heart rate</div>
+    <div class="tl-chart">
+      {% for slot in hr_slots %}
+        {% if slot is none %}
+          <div class="tl-col tl-col-empty"></div>
+        {% else %}
+          <div class="hr-col"
+               data-bpm-avg="{{ slot.avg }}"
+               data-bpm-min="{{ slot.min }}"
+               data-bpm-max="{{ slot.max }}">
+            <span class="hr-range" style="bottom: {{ '%.2f' % slot.range_bottom_pct }}%; height: {{ '%.2f' % slot.range_height_pct }}%"></span>
+            <span class="hr-dot"   style="bottom: {{ '%.2f' % slot.avg_pct }}%"></span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="tl-panel tl-panel-steps">
+    <div class="tl-panel-label">Steps</div>
+    <div class="tl-chart">
+      {% for v in steps_slots %}
+        {% if v is none or v == 0 %}
+          <div class="tl-col tl-col-empty"></div>
+        {% else %}
+          <div class="steps-col" data-steps="{{ v }}">
+            <span class="bar-fill bar-steps" style="height: {{ '%.2f' % steps_pct[loop.index0] }}%"></span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="tl-panel tl-panel-distance">
+    <div class="tl-panel-label">Distance</div>
+    <div class="tl-chart">
+      {% for v in dist_slots %}
+        {% if v is none or v == 0 %}
+          <div class="tl-col tl-col-empty"></div>
+        {% else %}
+          <div class="dist-col" data-meters="{{ v }}">
+            <span class="bar-fill bar-distance" style="height: {{ '%.2f' % dist_pct[loop.index0] }}%"></span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="tl-panel tl-panel-floors">
+    <div class="tl-panel-label">Floors</div>
+    <div class="tl-chart">
+      {% for v in floors_slots %}
+        {% if v is none or v == 0 %}
+          <div class="tl-col tl-col-empty"></div>
+        {% else %}
+          <div class="floors-col" data-floors="{{ v }}">
+            <span class="bar-fill bar-floors" style="height: {{ '%.2f' % floors_pct[loop.index0] }}%"></span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="tl-panel tl-panel-azm">
+    <div class="tl-panel-label">Active zone minutes</div>
+    <div class="tl-chart">
+      {% for s in azm_slots %}
+        {% if s is none or (s.fat_burn == 0 and s.cardio == 0 and s.peak == 0) %}
+          <div class="tl-col tl-col-empty"></div>
+        {% else %}
+          <div class="azm-col"
+               data-fat-burn="{{ s.fat_burn }}" data-cardio="{{ s.cardio }}" data-peak="{{ s.peak }}">
+            <span class="bar-fill azm-fat-burn" style="bottom: 0; height: {{ '%.2f' % s.fb_pct }}%"></span>
+            <span class="bar-fill azm-cardio"   style="bottom: {{ '%.2f' % s.fb_pct }}%; height: {{ '%.2f' % s.ca_pct }}%"></span>
+            <span class="bar-fill azm-peak"     style="bottom: {{ '%.2f' % (s.fb_pct + s.ca_pct) }}%; height: {{ '%.2f' % s.pk_pct }}%"></span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
