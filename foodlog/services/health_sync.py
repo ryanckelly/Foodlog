@@ -19,6 +19,9 @@ from foodlog.clients.google_health import GoogleHealthClient, RateLimited, Googl
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
+    IntervalActivity,
+    IntervalAzm,
+    IntervalHeartRate,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -312,3 +315,27 @@ class HealthSyncService:
                 hrcount += 1
         self._db.commit()
         return len(workouts), hrcount
+
+    async def _sync_interval_heart_rate(self) -> int:
+        since = cursor_for(self._db, IntervalHeartRate, "start_at", DEFAULT_BACKFILL_DAYS)
+        rows = [r async for r in self._client.list_hr_intervals(since=since)]
+        for row in rows:
+            stmt = sqlite_insert(IntervalHeartRate).values(
+                start_at=row.start_at,
+                bpm_avg=row.bpm_avg,
+                bpm_min=row.bpm_min,
+                bpm_max=row.bpm_max,
+                source=row.source,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["start_at"],
+                set_=dict(
+                    bpm_avg=row.bpm_avg,
+                    bpm_min=row.bpm_min,
+                    bpm_max=row.bpm_max,
+                    source=row.source,
+                ),
+            )
+            self._db.execute(stmt)
+        self._db.commit()
+        return len(rows)

@@ -126,3 +126,35 @@ async def test_cursor_for_workouts_uses_max_start_at(db_session, client):
     db_session.commit()
     cursor = cursor_for(db_session, Workout, "start_at", default_days=90)
     assert cursor == datetime.datetime(2026, 4, 15, 12, 0)
+
+
+@pytest.mark.asyncio
+async def test_sync_interval_heart_rate_upserts_idempotently(db_session, monkeypatch):
+    from foodlog.clients.google_health import HrIntervalRow
+    from foodlog.db.models import IntervalHeartRate
+    from foodlog.services.health_sync import HealthSyncService
+
+    rows = [
+        HrIntervalRow(
+            start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+            bpm_avg=110, bpm_min=88, bpm_max=140, source="FITBIT",
+        ),
+        HrIntervalRow(
+            start_at=datetime.datetime(2026, 4, 12, 12, 15, 0),
+            bpm_avg=115, bpm_min=92, bpm_max=145, source="FITBIT",
+        ),
+    ]
+
+    class StubClient:
+        async def list_hr_intervals(self, since, until=None):
+            for r in rows:
+                yield r
+
+    sync = HealthSyncService(db_session, StubClient())
+    n1 = await sync._sync_interval_heart_rate()
+    n2 = await sync._sync_interval_heart_rate()  # second run: still 2, no duplicates
+    assert n1 == 2
+    assert n2 == 2
+    stored = db_session.query(IntervalHeartRate).all()
+    assert len(stored) == 2
+    assert stored[0].bpm_avg == 110
