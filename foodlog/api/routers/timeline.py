@@ -169,6 +169,16 @@ def timeline(
         for m in meals
     ]
 
+    has_data = (
+        any(s is not None for s in hr_slots)
+        or any(s is not None for s in steps_slots)
+        or any(s is not None for s in dist_slots)
+        or any(s is not None for s in floors_slots)
+        or any(s is not None for s in azm_slots)
+        or bool(workout_views)
+        or bool(meal_views)
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard/timeline.html",
@@ -177,6 +187,7 @@ def timeline(
             "today": today,
             "is_today": day == today,
             "focus": focus,
+            "has_data": has_data,
             "hr_slots": hr_slots,
             "steps_slots": steps_slots,
             "dist_slots": dist_slots,

@@ -170,11 +170,39 @@ def test_timeline_focus_param_highlights_matching_workout(db_session):
 
 def test_timeline_renders_landscape_pill_strip(db_session):
     from foodlog.api.app import create_app
+    from foodlog.db.models import IntervalHeartRate
+
+    # Seed data so has_data=True and the pill strip is rendered
+    db_session.add(IntervalHeartRate(
+        start_at=datetime.datetime(2026, 4, 12, 10, 0, 0),
+        bpm_avg=100, bpm_min=80, bpm_max=120, source="FITBIT",
+    ))
+    db_session.commit()
+
     client = TestClient(create_app())
-    r = client.get("/dashboard/timeline")
+    r = client.get("/dashboard/timeline?date=2026-04-12")
     assert r.status_code == 200
     # Pills have anchor links for hash routing; HR is default
     assert 'class="tl-pill"' in r.text
     assert 'href="#tl-hr"' in r.text
     assert 'href="#tl-steps"' in r.text
     assert 'href="#tl-azm"' in r.text
+
+
+def test_timeline_empty_state_when_no_data(db_session):
+    from foodlog.api.app import create_app
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2024-01-01")
+    assert r.status_code == 200
+    assert "no data" in r.text.lower()
+    # Charts should not render
+    assert 'class="tl-chart"' not in r.text
+
+
+def test_timeline_future_day_shows_empty_state(db_session):
+    from foodlog.api.app import create_app
+    future = datetime.date.today() + datetime.timedelta(days=2)
+    client = TestClient(create_app())
+    r = client.get(f"/dashboard/timeline?date={future.isoformat()}")
+    assert r.status_code == 200
+    assert "no data" in r.text.lower()

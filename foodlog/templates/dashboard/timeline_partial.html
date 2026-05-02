@@ -1,4 +1,12 @@
+{% if not has_data %}
 <section class="timeline-section">
+  <div class="tl-empty">
+    <p>No data for this day.</p>
+    <p class="tl-empty-sub">If this is today, give the sync a moment and refresh.</p>
+  </div>
+</section>
+{% else %}
+<section class="timeline-section" data-day="{{ day.isoformat() }}">
   <div class="tl-meal-strip">
     {% for m in meal_views %}
       <span class="tl-meal-dot tl-meal-{{ m.meal_type }}"
@@ -120,3 +128,4 @@
     </div>
   </div>
 </section>
+{% endif %}
