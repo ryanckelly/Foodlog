@@ -135,3 +135,34 @@ def test_timeline_header_hides_today_when_on_today(db_session):
     client = TestClient(create_app())
     r = client.get("/dashboard/timeline")  # defaults to today
     assert 'class="tl-nav-today"' not in r.text
+
+
+def test_timeline_focus_param_highlights_matching_workout(db_session):
+    from foodlog.api.app import create_app
+    from foodlog.db.models import Workout
+
+    db_session.add(Workout(
+        external_id="walk-2",
+        start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+        end_at=datetime.datetime(2026, 4, 12, 12, 47, 0),
+        activity_type="Walk", duration_min=47,
+        calories_kcal=300.0, distance_m=3500.0,
+        avg_hr=112, max_hr=145, source="FITBIT",
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+
+    # Without focus → standard band, no focused class on the element
+    r1 = client.get("/dashboard/timeline?date=2026-04-12")
+    assert 'tl-workout-band' in r1.text
+    # tl-workout-focused only appears in CSS; not as an applied class attribute
+    assert 'class="tl-workout-band tl-workout-focused"' not in r1.text
+
+    # With matching focus → focused class applied to element
+    r2 = client.get("/dashboard/timeline?date=2026-04-12&focus=12:00-12:47")
+    assert 'class="tl-workout-band tl-workout-focused"' in r2.text
+
+    # With mismatched focus → focused class not applied
+    r3 = client.get("/dashboard/timeline?date=2026-04-12&focus=09:00-10:00")
+    assert 'class="tl-workout-band tl-workout-focused"' not in r3.text
