@@ -190,3 +190,29 @@ async def test_sync_interval_activity_upserts_with_nullable_columns(db_session):
     assert stored[0].steps == 649
     assert stored[0].floors is None
     assert stored[1].floors == 3
+
+
+@pytest.mark.asyncio
+async def test_sync_interval_azm_upserts(db_session):
+    from foodlog.clients.google_health import AzmIntervalRow
+    from foodlog.db.models import IntervalAzm
+    from foodlog.services.health_sync import HealthSyncService
+
+    rows = [
+        AzmIntervalRow(
+            start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+            fat_burn_min=8, cardio_min=None, peak_min=None, source="FITBIT",
+        ),
+    ]
+
+    class StubClient:
+        async def list_azm_intervals(self, since, until=None):
+            for r in rows:
+                yield r
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_interval_azm()
+    assert n == 1
+    stored = db_session.query(IntervalAzm).first()
+    assert stored.fat_burn_min == 8
+    assert stored.cardio_min is None

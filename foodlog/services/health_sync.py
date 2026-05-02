@@ -363,3 +363,27 @@ class HealthSyncService:
             self._db.execute(stmt)
         self._db.commit()
         return len(rows)
+
+    async def _sync_interval_azm(self) -> int:
+        since = cursor_for(self._db, IntervalAzm, "start_at", DEFAULT_BACKFILL_DAYS)
+        rows = [r async for r in self._client.list_azm_intervals(since=since)]
+        for row in rows:
+            stmt = sqlite_insert(IntervalAzm).values(
+                start_at=row.start_at,
+                fat_burn_min=row.fat_burn_min,
+                cardio_min=row.cardio_min,
+                peak_min=row.peak_min,
+                source=row.source,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["start_at"],
+                set_=dict(
+                    fat_burn_min=row.fat_burn_min,
+                    cardio_min=row.cardio_min,
+                    peak_min=row.peak_min,
+                    source=row.source,
+                ),
+            )
+            self._db.execute(stmt)
+        self._db.commit()
+        return len(rows)
