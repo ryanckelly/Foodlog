@@ -161,6 +161,9 @@ def _build_movement_context(db: Session, start_date, end_date) -> dict:
             "avg_hr": w.avg_hr,
             "max_hr": w.max_hr,
             "hr_samples": bars,
+            "start_at_date": w.start_at.date().isoformat(),
+            "start_hhmm":    w.start_at.strftime("%H:%M"),
+            "end_hhmm":      w.end_at.strftime("%H:%M"),
         })
 
     sleep = (db.query(SleepSession)

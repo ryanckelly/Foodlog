@@ -47,3 +47,52 @@ def test_health_connect_page_renders_prompt():
     html = TEMPLATES.get_template("dashboard/health_connect.html").render()
     assert "Connect Google Health" in html
     assert '/health/connect' in html
+
+
+def test_workout_card_has_timeline_deep_link(db_session, monkeypatch):
+    import datetime
+    from fastapi.testclient import TestClient
+    from foodlog.api.app import create_app
+    from foodlog.db.models import Workout, GoogleOAuthToken
+    from foodlog.config import settings
+    from cryptography.fernet import Fernet
+
+    # Enable google health so movement section is rendered
+    _KEY = Fernet.generate_key().decode()
+    monkeypatch.setattr(settings, "google_client_id", "test-client-id")
+    monkeypatch.setattr(settings, "google_client_secret", "test-client-secret")
+    monkeypatch.setattr(settings, "foodlog_google_token_key", _KEY)
+
+    fernet = Fernet(_KEY.encode())
+    db_session.add(GoogleOAuthToken(
+        id=1,
+        refresh_token_encrypted=fernet.encrypt(b"rt").decode(),
+        scopes_json="[]",
+        issued_at=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
+    ))
+
+    today = datetime.date.today()
+    start = datetime.datetime.combine(today, datetime.time(12, 0))
+    end = datetime.datetime.combine(today, datetime.time(12, 47))
+    db_session.add(Workout(
+        external_id="walk-3",
+        start_at=start,
+        end_at=end,
+        activity_type="Walk", duration_min=47,
+        calories_kcal=300.0, distance_m=3500.0,
+        avg_hr=112, max_hr=145, source="FITBIT",
+    ))
+    db_session.commit()
+
+    # Seed recent sync to suppress background task and avoid token errors
+    from foodlog.api.routers import dashboard as dm
+    dm._sync_state.last_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/feed?date_range=today")
+    assert r.status_code == 200
+    # The link points to the timeline with the right deep-link params
+    assert f"/dashboard/timeline?date={today.isoformat()}" in r.text
+    assert "focus=12:00-12:47" in r.text
+    # The visible affordance text
+    assert "→ Timeline" in r.text

@@ -29,6 +29,8 @@
             {% if w.avg_hr %} · avg {{ w.avg_hr }}{% endif %}
             {% if w.max_hr %} · peak {{ w.max_hr }}{% endif %}
           </div>
+          <a class="mv-card-link"
+             href="/dashboard/timeline?date={{ w.start_at_date }}&focus={{ w.start_hhmm }}-{{ w.end_hhmm }}">→ Timeline</a>
         </div>
       {% endfor %}
 
