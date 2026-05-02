@@ -241,3 +241,42 @@ class WorkoutHrSample(Base):
     bpm: Mapped[int] = mapped_column(Integer, nullable=False)
 
     workout = relationship("Workout", back_populates="hr_samples")
+
+
+class IntervalHeartRate(Base):
+    __tablename__ = "interval_heart_rate"
+
+    start_at:   Mapped[datetime.datetime] = mapped_column(DateTime, primary_key=True)
+    bpm_avg:    Mapped[int] = mapped_column(Integer, nullable=False)
+    bpm_min:    Mapped[int] = mapped_column(Integer, nullable=False)
+    bpm_max:    Mapped[int] = mapped_column(Integer, nullable=False)
+    source:     Mapped[str] = mapped_column(String(128), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class IntervalActivity(Base):
+    __tablename__ = "interval_activity"
+
+    start_at:   Mapped[datetime.datetime] = mapped_column(DateTime, primary_key=True)
+    steps:      Mapped[int | None]   = mapped_column(Integer, nullable=True)
+    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    floors:     Mapped[int | None]   = mapped_column(Integer, nullable=True)
+    source:     Mapped[str] = mapped_column(String(128), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class IntervalAzm(Base):
+    __tablename__ = "interval_azm"
+
+    start_at:     Mapped[datetime.datetime] = mapped_column(DateTime, primary_key=True)
+    fat_burn_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cardio_min:   Mapped[int | None] = mapped_column(Integer, nullable=True)
+    peak_min:     Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source:       Mapped[str] = mapped_column(String(128), nullable=False)
+    fetched_at:   Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
