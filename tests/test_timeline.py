@@ -67,3 +67,21 @@ def test_timeline_renders_activity_panels(db_session):
     assert r.text.count('class="dist-col"') == 2
     # Only one floors data point (the other has floors=None)
     assert r.text.count('class="floors-col"') == 1
+
+
+def test_timeline_renders_azm_stacked_panel(db_session):
+    from foodlog.api.app import create_app
+    from foodlog.db.models import IntervalAzm
+
+    db_session.add(IntervalAzm(
+        start_at=datetime.datetime(2026, 4, 12, 12, 35, 0),
+        fat_burn_min=12, cardio_min=2, peak_min=None, source="FITBIT",
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    assert 'class="azm-col"' in r.text
+    assert 'azm-fat-burn' in r.text
+    assert 'azm-cardio' in r.text
