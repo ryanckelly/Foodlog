@@ -286,6 +286,30 @@ async def test_rollup_posts_correct_body_and_returns_points():
 
 
 @pytest.mark.asyncio
+async def test_list_azm_intervals_parses_zone_breakdown():
+    async with httpx.AsyncClient() as http:
+        with respx.mock(base_url="https://health.googleapis.com") as mock:
+            mock.post(url__regex=r".*/active-zone-minutes/dataPoints:rollUp.*").mock(
+                return_value=httpx.Response(200, json=_load("azm_rollup.json"))
+            )
+            client = GoogleHealthClient(http, access_token="test")
+            since = datetime.datetime(2026, 4, 12, 11, 50, 0)
+            until = datetime.datetime(2026, 4, 12, 13, 30, 0)
+            rows = [r async for r in client.list_azm_intervals(since=since, until=until)]
+
+    # 5 windows in fixture; 5th is empty {}
+    assert len(rows) == 4
+    first = rows[0]
+    assert first.fat_burn_min == 3
+    assert first.cardio_min is None
+    assert first.peak_min is None
+    fourth = rows[3]
+    assert fourth.fat_burn_min == 12
+    assert fourth.cardio_min == 2
+    assert fourth.peak_min is None
+
+
+@pytest.mark.asyncio
 async def test_list_activity_intervals_zips_three_endpoints_and_skips_empty():
     activity_fix = _load("activity_rollup.json")
     # Synthesize per-endpoint responses by stripping the others.

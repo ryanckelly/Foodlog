@@ -568,6 +568,37 @@ class GoogleHealthClient:
                 source=_source_from(pt.get("dataSource")),
             )
 
+    async def list_azm_intervals(
+        self,
+        since: datetime.datetime,
+        until: datetime.datetime | None = None,
+    ) -> AsyncIterator[AzmIntervalRow]:
+        """15-min active-zone-minutes rollup with HR-zone breakdown."""
+        end = until or datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        for pt in await self._rollup(
+            "active-zone-minutes", since, end, window_size_s=900,
+        ):
+            azm = pt.get("activeZoneMinutes") or {}
+            start_s = pt.get("startTime")
+            if not start_s:
+                continue
+            fb = azm.get("sumInFatBurnHeartZone")
+            ca = azm.get("sumInCardioHeartZone")
+            pk = azm.get("sumInPeakHeartZone")
+            if fb is None and ca is None and pk is None:
+                continue
+            try:
+                yield AzmIntervalRow(
+                    start_at=_parse_time(start_s),
+                    fat_burn_min=int(fb) if fb is not None else None,
+                    cardio_min=int(ca)   if ca is not None else None,
+                    peak_min=int(pk)     if pk is not None else None,
+                    source=_source_from(pt.get("dataSource")),
+                )
+            except (ValueError, TypeError):
+                logger.warning("google-health azm rollup malformed: %r", pt)
+                continue
+
     async def list_activity_intervals(
         self,
         since: datetime.datetime,
