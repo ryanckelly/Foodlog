@@ -1,0 +1,8 @@
+{
+  "rollupDataPoints": [
+    {"startTime": "2026-04-12T11:50:00Z", "endTime": "2026-04-12T12:05:00Z", "heartRate": {"beatsPerMinuteAvg": 102.3, "beatsPerMinuteMax": 121, "beatsPerMinuteMin": 88}},
+    {"startTime": "2026-04-12T12:05:00Z", "endTime": "2026-04-12T12:20:00Z", "heartRate": {"beatsPerMinuteAvg": 112.0, "beatsPerMinuteMax": 161, "beatsPerMinuteMin": 89}},
+    {"startTime": "2026-04-12T12:20:00Z", "endTime": "2026-04-12T12:35:00Z", "heartRate": {"beatsPerMinuteAvg": 115.4, "beatsPerMinuteMax": 145, "beatsPerMinuteMin": 84}},
+    {"startTime": "2026-04-12T12:35:00Z", "endTime": "2026-04-12T12:50:00Z", "heartRate": {"beatsPerMinuteAvg": 118.2, "beatsPerMinuteMax": 143, "beatsPerMinuteMin": 86}}
+  ]
+}

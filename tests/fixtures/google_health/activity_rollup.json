@@ -1,0 +1,9 @@
+{
+  "rollupDataPoints": [
+    {"startTime": "2026-04-12T11:50:00Z", "endTime": "2026-04-12T12:05:00Z", "steps": {"countSum": "649"}, "distance": {"millimetersSum": "420268"}, "floors": {}},
+    {"startTime": "2026-04-12T12:05:00Z", "endTime": "2026-04-12T12:20:00Z", "steps": {"countSum": "792"}, "distance": {"millimetersSum": "628500"}, "floors": {"countSum": "3"}},
+    {"startTime": "2026-04-12T12:20:00Z", "endTime": "2026-04-12T12:35:00Z", "steps": {"countSum": "1215"}, "distance": {"millimetersSum": "854000"}, "floors": {"countSum": "1"}},
+    {"startTime": "2026-04-12T12:35:00Z", "endTime": "2026-04-12T12:50:00Z", "steps": {"countSum": "1462"}, "distance": {"millimetersSum": "1133000"}, "floors": {"countSum": "5"}},
+    {"startTime": "2026-04-12T13:00:00Z", "endTime": "2026-04-12T13:15:00Z", "steps": {}, "distance": {}, "floors": {}}
+  ]
+}

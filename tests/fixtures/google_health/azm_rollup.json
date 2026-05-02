@@ -1,0 +1,9 @@
+{
+  "rollupDataPoints": [
+    {"startTime": "2026-04-12T11:50:00Z", "endTime": "2026-04-12T12:05:00Z", "activeZoneMinutes": {"sumInFatBurnHeartZone": "3"}},
+    {"startTime": "2026-04-12T12:05:00Z", "endTime": "2026-04-12T12:20:00Z", "activeZoneMinutes": {"sumInFatBurnHeartZone": "8"}},
+    {"startTime": "2026-04-12T12:20:00Z", "endTime": "2026-04-12T12:35:00Z", "activeZoneMinutes": {"sumInFatBurnHeartZone": "1"}},
+    {"startTime": "2026-04-12T12:35:00Z", "endTime": "2026-04-12T12:50:00Z", "activeZoneMinutes": {"sumInFatBurnHeartZone": "12", "sumInCardioHeartZone": "2"}},
+    {"startTime": "2026-04-12T13:00:00Z", "endTime": "2026-04-12T13:15:00Z", "activeZoneMinutes": {}}
+  ]
+}
