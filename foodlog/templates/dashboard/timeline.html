@@ -1,11 +1,28 @@
 {% extends "base.html" %}
 
 {% block content %}
-<header class="topbar">
+{% set prev_day = day - one_day %}
+{% set next_day = day + one_day %}
+
+<header class="topbar tl-topbar">
   <div class="brand">
     <span class="mark"><span class="dot"></span>FoodLog</span>
-    <span class="date">Timeline · {{ day.strftime('%A, %b %-d, %Y') }}</span>
   </div>
+
+  <nav class="tl-nav">
+    <a class="tl-nav-prev" href="/dashboard/timeline?date={{ prev_day.isoformat() }}" aria-label="Previous day">‹</a>
+
+    <form class="tl-nav-picker" method="get" action="/dashboard/timeline">
+      <label class="tl-nav-day">{{ day.strftime('%a, %b %-d') }}</label>
+      <input type="date" name="date" value="{{ day.isoformat() }}" onchange="this.form.submit()">
+    </form>
+
+    <a class="tl-nav-next" href="/dashboard/timeline?date={{ next_day.isoformat() }}" aria-label="Next day">›</a>
+
+    {% if not is_today %}
+      <a class="tl-nav-today" href="/dashboard/timeline">Today</a>
+    {% endif %}
+  </nav>
 </header>
 
 <div id="timeline-content">

@@ -187,5 +187,6 @@ def timeline(
             "azm_slots": azm_slots,
             "workout_views": workout_views,
             "meal_views": meal_views,
+            "one_day": datetime.timedelta(days=1),
         },
     )

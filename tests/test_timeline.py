@@ -115,3 +115,23 @@ def test_timeline_overlays_workouts_and_meal_dots(db_session):
     assert 'class="tl-workout-band"' in r.text
     assert 'Walk' in r.text
     assert 'class="tl-meal-dot' in r.text  # may have extra classes appended
+
+
+def test_timeline_header_has_date_navigation(db_session):
+    from foodlog.api.app import create_app
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    assert 'class="tl-nav-prev"' in r.text
+    assert 'class="tl-nav-next"' in r.text
+    # Today is shown only when not on today
+    assert 'class="tl-nav-today"' in r.text
+    # Date picker form
+    assert 'name="date"' in r.text
+
+
+def test_timeline_header_hides_today_when_on_today(db_session):
+    from foodlog.api.app import create_app
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline")  # defaults to today
+    assert 'class="tl-nav-today"' not in r.text

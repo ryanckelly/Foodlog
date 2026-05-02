@@ -589,6 +589,49 @@
         .hr-col, .steps-col, .dist-col, .floors-col, .azm-col {
             z-index: 2;  /* on top of workout band */
         }
+
+        /* ── Timeline date navigation ───────────────────────── */
+        .tl-topbar {
+            justify-content: space-between;
+        }
+        .tl-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .tl-nav a {
+            color: var(--ink-soft);
+            text-decoration: none;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+        }
+        .tl-nav a:hover { background: var(--bg-sunk); }
+        .tl-nav-prev, .tl-nav-next {
+            font-size: 1.4rem;
+            line-height: 1;
+        }
+        .tl-nav-picker {
+            position: relative;
+        }
+        .tl-nav-day {
+            font-weight: 500;
+            font-size: 0.95rem;
+            padding: 0.2rem 0.4rem;
+        }
+        .tl-nav-picker input[type="date"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .tl-nav-today {
+            font-size: 0.85rem;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 999px;
+            padding: 0.15rem 0.7rem;
+        }
     </style>
 </head>
 <body>
