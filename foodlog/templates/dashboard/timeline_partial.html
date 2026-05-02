@@ -1,7 +1,22 @@
 <section class="timeline-section">
+  <div class="tl-meal-strip">
+    {% for m in meal_views %}
+      <span class="tl-meal-dot tl-meal-{{ m.meal_type }}"
+            style="left: {{ '%.2f' % m.left_pct }}%"
+            title="{{ m.name }}"></span>
+    {% endfor %}
+  </div>
+
   <div class="tl-panel tl-panel-hr">
     <div class="tl-panel-label">Heart rate</div>
     <div class="tl-chart">
+      {% for w in workout_views %}
+        <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
+             style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
+      {% endfor %}
+      {% for w in workout_views %}
+        <div class="tl-workout-label" style="left: {{ '%.2f' % w.left_pct }}%">{{ w.label }} · {{ w.duration_min }}m</div>
+      {% endfor %}
       {% for slot in hr_slots %}
         {% if slot is none %}
           <div class="tl-col tl-col-empty"></div>
@@ -21,6 +36,10 @@
   <div class="tl-panel tl-panel-steps">
     <div class="tl-panel-label">Steps</div>
     <div class="tl-chart">
+      {% for w in workout_views %}
+        <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
+             style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
+      {% endfor %}
       {% for v in steps_slots %}
         {% if v is none or v == 0 %}
           <div class="tl-col tl-col-empty"></div>
@@ -36,6 +55,10 @@
   <div class="tl-panel tl-panel-distance">
     <div class="tl-panel-label">Distance</div>
     <div class="tl-chart">
+      {% for w in workout_views %}
+        <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
+             style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
+      {% endfor %}
       {% for v in dist_slots %}
         {% if v is none or v == 0 %}
           <div class="tl-col tl-col-empty"></div>
@@ -51,6 +74,10 @@
   <div class="tl-panel tl-panel-floors">
     <div class="tl-panel-label">Floors</div>
     <div class="tl-chart">
+      {% for w in workout_views %}
+        <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
+             style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
+      {% endfor %}
       {% for v in floors_slots %}
         {% if v is none or v == 0 %}
           <div class="tl-col tl-col-empty"></div>
@@ -66,6 +93,10 @@
   <div class="tl-panel tl-panel-azm">
     <div class="tl-panel-label">Active zone minutes</div>
     <div class="tl-chart">
+      {% for w in workout_views %}
+        <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
+             style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
+      {% endfor %}
       {% for s in azm_slots %}
         {% if s is none or (s.fat_burn == 0 and s.cardio == 0 and s.peak == 0) %}
           <div class="tl-col tl-col-empty"></div>

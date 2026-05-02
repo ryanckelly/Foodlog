@@ -540,6 +540,55 @@
         .azm-fat-burn { background: var(--metric-azm-light); }
         .azm-cardio   { background: var(--metric-azm-mid); }
         .azm-peak     { background: var(--metric-azm-peak); }
+
+        .tl-meal-strip {
+            position: relative;
+            height: 18px;
+            margin-bottom: 6px;
+        }
+        .tl-meal-dot {
+            position: absolute;
+            top: 4px;
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            background: var(--marker-meal);
+            box-shadow: 0 0 0 2px var(--bg);
+        }
+        .tl-meal-breakfast { background: var(--meal-breakfast); }
+        .tl-meal-lunch     { background: var(--meal-lunch); }
+        .tl-meal-dinner    { background: var(--meal-dinner); }
+        .tl-meal-snack     { background: var(--meal-snack); }
+
+        .tl-workout-band {
+            position: absolute;
+            top: 0; bottom: 0;
+            background: var(--metric-hr-soft);
+            border-left: 1px solid rgba(199, 94, 60, 0.35);
+            border-right: 1px solid rgba(199, 94, 60, 0.35);
+            z-index: 1;
+            pointer-events: none;
+        }
+        .tl-workout-focused {
+            background: rgba(199, 94, 60, 0.22);
+            border-left: 2px solid var(--metric-hr);
+            border-right: 2px solid var(--metric-hr);
+        }
+        .tl-workout-label {
+            position: absolute;
+            top: 4px;
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--metric-hr);
+            background: rgba(255, 255, 255, 0.92);
+            padding: 1px 6px;
+            border-radius: 3px;
+            z-index: 3;
+            white-space: nowrap;
+        }
+        .hr-col, .steps-col, .dist-col, .floors-col, .azm-col {
+            z-index: 2;  /* on top of workout band */
+        }
     </style>
 </head>
 <body>

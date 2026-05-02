@@ -85,3 +85,33 @@ def test_timeline_renders_azm_stacked_panel(db_session):
     assert 'class="azm-col"' in r.text
     assert 'azm-fat-burn' in r.text
     assert 'azm-cardio' in r.text
+
+
+def test_timeline_overlays_workouts_and_meal_dots(db_session):
+    from foodlog.api.app import create_app
+    from foodlog.db.models import Workout, FoodEntry
+
+    db_session.add(Workout(
+        external_id="walk-1",
+        start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+        end_at=datetime.datetime(2026, 4, 12, 12, 47, 0),
+        activity_type="Walk",
+        duration_min=47,
+        calories_kcal=300.0, distance_m=3500.0,
+        avg_hr=112, max_hr=145, source="FITBIT",
+    ))
+    db_session.add(FoodEntry(
+        meal_type="lunch", food_name="salad",
+        quantity=1, unit="bowl",
+        calories=400, protein_g=20, carbs_g=30, fat_g=10,
+        source="manual", raw_input="salad",
+        logged_at=datetime.datetime(2026, 4, 12, 13, 0, 0),
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    assert 'class="tl-workout-band"' in r.text
+    assert 'Walk' in r.text
+    assert 'class="tl-meal-dot' in r.text  # may have extra classes appended

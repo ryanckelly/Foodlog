@@ -30,6 +30,19 @@ def _pct(value: int, lo: int, hi: int) -> float:
     return max(0.0, min(100.0, (value - lo) / (hi - lo) * 100.0))
 
 
+def _is_focused(focus: str | None, start: datetime.datetime, end: datetime.datetime) -> bool:
+    if not focus:
+        return False
+    try:
+        a, b = focus.split("-")
+        ah, am = (int(x) for x in a.split(":"))
+        bh, bm = (int(x) for x in b.split(":"))
+    except (ValueError, AttributeError):
+        return False
+    return (start.hour == ah and start.minute == am
+            and end.hour == bh and end.minute == bm)
+
+
 @router.get("/timeline", response_class=HTMLResponse)
 def timeline(
     request: Request,
@@ -119,6 +132,43 @@ def timeline(
         s["ca_pct"] = (s["cardio"]   / azm_peak_total * 100.0) if azm_peak_total else 0
         s["pk_pct"] = (s["peak"]     / azm_peak_total * 100.0) if azm_peak_total else 0
 
+    from foodlog.db.models import Workout, FoodEntry
+
+    def _pct_of_day(dt: datetime.datetime) -> float:
+        secs = (dt - start_dt).total_seconds()
+        return max(0.0, min(100.0, secs / 86400.0 * 100.0))
+
+    workouts = db.query(Workout).filter(
+        Workout.start_at >= start_dt,
+        Workout.start_at < end_dt,
+    ).all()
+    workout_views = []
+    for w in workouts:
+        left = _pct_of_day(w.start_at)
+        right = 100.0 - _pct_of_day(w.end_at)
+        workout_views.append({
+            "label": w.activity_type,
+            "duration_min": w.duration_min,
+            "left_pct":  left,
+            "right_pct": right,
+            "start_hhmm": w.start_at.strftime("%H:%M"),
+            "end_hhmm":   w.end_at.strftime("%H:%M"),
+            "is_focused": _is_focused(focus, w.start_at, w.end_at),
+        })
+
+    meals = db.query(FoodEntry).filter(
+        FoodEntry.logged_at >= start_dt,
+        FoodEntry.logged_at < end_dt,
+    ).all()
+    meal_views = [
+        {
+            "name": m.food_name,
+            "meal_type": m.meal_type,
+            "left_pct": _pct_of_day(m.logged_at),
+        }
+        for m in meals
+    ]
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard/timeline.html",
@@ -135,5 +185,7 @@ def timeline(
             "dist_pct": dist_pct,
             "floors_pct": floors_pct,
             "azm_slots": azm_slots,
+            "workout_views": workout_views,
+            "meal_views": meal_views,
         },
     )
