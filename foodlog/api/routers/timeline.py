@@ -2,7 +2,7 @@ import datetime
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from foodlog.api.routers.dashboard import (
     _background_health_sync,
     _sync_due,
 )
+from foodlog.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -50,7 +51,10 @@ def timeline(
     db: Session = Depends(get_db),
     date: str | None = None,
     focus: str | None = None,
-) -> HTMLResponse:
+):
+    if settings.google_sso_configured and "user" not in request.session:
+        return RedirectResponse(url="/login")
+
     from foodlog.db.models import IntervalHeartRate
     day = _parse_date(date)
     today = datetime.date.today()
