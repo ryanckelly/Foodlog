@@ -101,6 +101,9 @@ class HealthSyncService:
         await _run("body_composition", self._sync_body_composition)
         await _run("resting_heart_rate", self._sync_resting_hr)
         await _run("sleep_sessions", self._sync_sleep, brittle=True)
+        await _run("interval_heart_rate", self._sync_interval_heart_rate)
+        await _run("interval_activity", self._sync_interval_activity)
+        await _run("interval_azm", self._sync_interval_azm)
 
         # workouts + hr_samples are synced together but reported separately.
         try:

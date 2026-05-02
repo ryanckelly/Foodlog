@@ -216,3 +216,47 @@ async def test_sync_interval_azm_upserts(db_session):
     stored = db_session.query(IntervalAzm).first()
     assert stored.fat_burn_min == 8
     assert stored.cardio_min is None
+
+
+@pytest.mark.asyncio
+async def test_sync_all_includes_interval_metrics(db_session):
+    from foodlog.clients.google_health import (
+        HrIntervalRow, ActivityIntervalRow, AzmIntervalRow,
+    )
+    from foodlog.services.health_sync import HealthSyncService
+
+    class StubClient:
+        async def list_daily_activity(self, since, until=None):
+            return; yield  # empty generator
+        async def list_body_composition(self, since, until=None):
+            return; yield
+        async def list_resting_heart_rate(self, since, until=None):
+            return; yield
+        async def list_sleep_sessions(self, since, until=None):
+            return; yield
+        async def list_workouts(self, since, until=None):
+            return; yield
+        async def list_workout_hr_samples(self, workout_id, start_at, end_at):
+            return; yield
+        async def list_hr_intervals(self, since, until=None):
+            yield HrIntervalRow(
+                start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+                bpm_avg=110, bpm_min=88, bpm_max=140, source="FITBIT",
+            )
+        async def list_activity_intervals(self, since, until=None):
+            yield ActivityIntervalRow(
+                start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+                steps=600, distance_m=400.0, floors=None, source="FITBIT",
+            )
+        async def list_azm_intervals(self, since, until=None):
+            yield AzmIntervalRow(
+                start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+                fat_burn_min=5, cardio_min=None, peak_min=None, source="FITBIT",
+            )
+
+    sync = HealthSyncService(db_session, StubClient())
+    result = await sync.sync_all()
+    assert result.ok is True
+    assert result.rows_upserted.get("interval_heart_rate") == 1
+    assert result.rows_upserted.get("interval_activity") == 1
+    assert result.rows_upserted.get("interval_azm") == 1
