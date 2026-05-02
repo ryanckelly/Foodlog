@@ -286,6 +286,43 @@ async def test_rollup_posts_correct_body_and_returns_points():
 
 
 @pytest.mark.asyncio
+async def test_list_activity_intervals_zips_three_endpoints_and_skips_empty():
+    activity_fix = _load("activity_rollup.json")
+    # Synthesize per-endpoint responses by stripping the others.
+    def _only(field: str) -> dict:
+        return {
+            "rollupDataPoints": [
+                {"startTime": p["startTime"], "endTime": p["endTime"], field: p.get(field, {})}
+                for p in activity_fix["rollupDataPoints"]
+            ]
+        }
+    async with httpx.AsyncClient() as http:
+        with respx.mock(base_url="https://health.googleapis.com") as mock:
+            r_steps = mock.post(url__regex=r".*/steps/dataPoints:rollUp.*").mock(
+                return_value=httpx.Response(200, json=_only("steps"))
+            )
+            r_dist = mock.post(url__regex=r".*/distance/dataPoints:rollUp.*").mock(
+                return_value=httpx.Response(200, json=_only("distance"))
+            )
+            r_floors = mock.post(url__regex=r".*/floors/dataPoints:rollUp.*").mock(
+                return_value=httpx.Response(200, json=_only("floors"))
+            )
+            client = GoogleHealthClient(http, access_token="test")
+            since = datetime.datetime(2026, 4, 12, 11, 50, 0)
+            until = datetime.datetime(2026, 4, 12, 13, 30, 0)
+            rows = [r async for r in client.list_activity_intervals(since=since, until=until)]
+
+    assert r_steps.called and r_dist.called and r_floors.called
+    # 5 windows; 5th (13:00) has all-empty across all three -> dropped
+    assert len(rows) == 4
+    by_time = {r.start_at: r for r in rows}
+    first = by_time[datetime.datetime(2026, 4, 12, 11, 50, 0)]
+    assert first.steps == 649
+    assert abs(first.distance_m - 420.268) < 1e-6
+    assert first.floors is None
+
+
+@pytest.mark.asyncio
 async def test_list_hr_intervals_chunks_into_14_day_slices():
     async with httpx.AsyncClient() as http:
         with respx.mock(base_url="https://health.googleapis.com") as mock:

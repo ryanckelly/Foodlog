@@ -568,6 +568,62 @@ class GoogleHealthClient:
                 source=_source_from(pt.get("dataSource")),
             )
 
+    async def list_activity_intervals(
+        self,
+        since: datetime.datetime,
+        until: datetime.datetime | None = None,
+    ) -> AsyncIterator[ActivityIntervalRow]:
+        """15-min steps/distance/floors rollup. Single 90-day request fits.
+        Issues three parallel calls (one per endpoint) and zips by startTime.
+        """
+        import asyncio
+
+        end = until or datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+        steps_pts, dist_pts, floors_pts = await asyncio.gather(
+            self._rollup("steps", since, end, window_size_s=900),
+            self._rollup("distance", since, end, window_size_s=900),
+            self._rollup("floors", since, end, window_size_s=900),
+        )
+
+        def _index(points: list[dict], inner: str, sum_field: str) -> dict[str, tuple]:
+            out: dict[str, tuple] = {}
+            for p in points:
+                start_s = p.get("startTime")
+                value = (p.get(inner) or {}).get(sum_field)
+                if start_s and value is not None:
+                    try:
+                        out[start_s] = (int(value), p.get("dataSource"))
+                    except (ValueError, TypeError):
+                        continue
+            return out
+
+        steps_by   = _index(steps_pts,   "steps",    "countSum")
+        floors_by  = _index(floors_pts,  "floors",   "countSum")
+        # distance is mm; cast to float, convert to meters
+        dist_by: dict[str, tuple[float, dict | None]] = {}
+        for p in dist_pts:
+            start_s = p.get("startTime")
+            mm = (p.get("distance") or {}).get("millimetersSum")
+            if start_s and mm is not None:
+                try:
+                    dist_by[start_s] = (float(mm) / 1000.0, p.get("dataSource"))
+                except (ValueError, TypeError):
+                    continue
+
+        all_times = sorted(set(steps_by) | set(dist_by) | set(floors_by))
+        for ts in all_times:
+            steps_v   = steps_by.get(ts, (None, None))
+            dist_v    = dist_by.get(ts, (None, None))
+            floors_v  = floors_by.get(ts, (None, None))
+            ds = steps_v[1] or dist_v[1] or floors_v[1]
+            yield ActivityIntervalRow(
+                start_at=_parse_time(ts),
+                steps=steps_v[0],
+                distance_m=dist_v[0],
+                floors=floors_v[0],
+                source=_source_from(ds),
+            )
+
     async def list_hr_intervals(
         self,
         since: datetime.datetime,
