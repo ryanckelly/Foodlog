@@ -7,7 +7,15 @@
     {% endfor %}
   </div>
 
-  <div class="tl-panel tl-panel-hr">
+  <nav class="tl-pill-strip" aria-label="Switch metric (landscape)">
+    <a class="tl-pill" href="#tl-hr">Heart rate</a>
+    <a class="tl-pill" href="#tl-steps">Steps</a>
+    <a class="tl-pill" href="#tl-distance">Distance</a>
+    <a class="tl-pill" href="#tl-floors">Floors</a>
+    <a class="tl-pill" href="#tl-azm">AZM</a>
+  </nav>
+
+  <div id="tl-hr" class="tl-panel tl-panel-hr">
     <div class="tl-panel-label">Heart rate</div>
     <div class="tl-chart">
       {% for w in workout_views %}
@@ -33,7 +41,7 @@
     </div>
   </div>
 
-  <div class="tl-panel tl-panel-steps">
+  <div id="tl-steps" class="tl-panel tl-panel-steps">
     <div class="tl-panel-label">Steps</div>
     <div class="tl-chart">
       {% for w in workout_views %}
@@ -52,7 +60,7 @@
     </div>
   </div>
 
-  <div class="tl-panel tl-panel-distance">
+  <div id="tl-distance" class="tl-panel tl-panel-distance">
     <div class="tl-panel-label">Distance</div>
     <div class="tl-chart">
       {% for w in workout_views %}
@@ -71,7 +79,7 @@
     </div>
   </div>
 
-  <div class="tl-panel tl-panel-floors">
+  <div id="tl-floors" class="tl-panel tl-panel-floors">
     <div class="tl-panel-label">Floors</div>
     <div class="tl-chart">
       {% for w in workout_views %}
@@ -90,7 +98,7 @@
     </div>
   </div>
 
-  <div class="tl-panel tl-panel-azm">
+  <div id="tl-azm" class="tl-panel tl-panel-azm">
     <div class="tl-panel-label">Active zone minutes</div>
     <div class="tl-chart">
       {% for w in workout_views %}

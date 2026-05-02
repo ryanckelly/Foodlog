@@ -632,6 +632,58 @@
             border-radius: 999px;
             padding: 0.15rem 0.7rem;
         }
+
+        /* Pills hidden in portrait */
+        .tl-pill-strip { display: none; }
+
+        @media (orientation: landscape) and (max-width: 1024px) {
+            .tl-pill-strip {
+                display: flex;
+                gap: 0.4rem;
+                padding: 0.4rem 0;
+                overflow-x: auto;
+                margin-bottom: 0.5rem;
+            }
+            .tl-pill {
+                font-size: 0.8rem;
+                padding: 0.3rem 0.7rem;
+                border-radius: 999px;
+                background: var(--bg-sunk);
+                color: var(--ink-soft);
+                text-decoration: none;
+                white-space: nowrap;
+            }
+            .tl-pill:focus,
+            .tl-pill:hover {
+                background: var(--accent);
+                color: white;
+            }
+            /* In landscape, hide all panels by default; show the targeted one */
+            .timeline-section .tl-panel { display: none; }
+            .timeline-section .tl-panel:target { display: block; }
+            /* Default to HR when no hash */
+            .timeline-section:not(:has(.tl-panel:target)) #tl-hr { display: block; }
+            /* The targeted panel takes the full viewport */
+            .tl-panel:target .tl-chart { height: 60vh; }
+        }
+
+        .mv-card-link {
+            display: block;
+            text-align: right;
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-decoration: none;
+            margin-top: 0.4rem;
+        }
+        .mv-card-link:hover { text-decoration: underline; }
+
+        .tl-empty {
+            text-align: center;
+            padding: 4rem 1rem;
+            color: var(--muted);
+        }
+        .tl-empty p { margin: 0.4rem 0; }
+        .tl-empty-sub { font-size: 0.85rem; }
     </style>
 </head>
 <body>

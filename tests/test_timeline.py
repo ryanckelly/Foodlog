@@ -166,3 +166,15 @@ def test_timeline_focus_param_highlights_matching_workout(db_session):
     # With mismatched focus → focused class not applied
     r3 = client.get("/dashboard/timeline?date=2026-04-12&focus=09:00-10:00")
     assert 'class="tl-workout-band tl-workout-focused"' not in r3.text
+
+
+def test_timeline_renders_landscape_pill_strip(db_session):
+    from foodlog.api.app import create_app
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline")
+    assert r.status_code == 200
+    # Pills have anchor links for hash routing; HR is default
+    assert 'class="tl-pill"' in r.text
+    assert 'href="#tl-hr"' in r.text
+    assert 'href="#tl-steps"' in r.text
+    assert 'href="#tl-azm"' in r.text
