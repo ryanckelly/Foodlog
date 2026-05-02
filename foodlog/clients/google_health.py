@@ -304,12 +304,16 @@ class GoogleHealthClient:
             f"{BASE_URL}/{API_VERSION}/users/me/dataTypes/{data_type}/"
             f"dataPoints:rollUp"
         )
+        # Google requires pageSize >= number-of-windows-in-range. For our 90-day
+        # × 15-min range that's 8640; for the 14-day HR chunks it's 1344. Setting
+        # 10000 covers both without us having to plumb the count through.
         body = {
             "range": {
                 "startTime": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "endTime":   until.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
             "windowSize": f"{window_size_s}s",
+            "pageSize": 10000,
         }
         resp = await self._http.post(url, json=body, headers=self._auth_header)
         if resp.status_code == 429:
