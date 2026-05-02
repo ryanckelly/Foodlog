@@ -46,11 +46,12 @@
       {% if weight %}
         <div class="mv-card">
           <div class="mv-card-title">Weight</div>
-          <div class="mv-card-big">{{ "%.1f"|format(weight.weight_kg) }} <span class="mv-card-sub">kg</span></div>
+          <div class="mv-card-big">{{ "%.1f"|format(weight.weight_kg * 2.20462) }} <span class="mv-card-sub">lbs ({{ "%.1f"|format(weight.weight_kg) }} kg)</span></div>
           <div class="mv-card-sub">
             {% if weight.delta_kg is not none %}
-              {% if weight.delta_kg < 0 %}{{ "%.1f"|format(weight.delta_kg) }} kg this week
-              {% else %}+{{ "%.1f"|format(weight.delta_kg) }} kg this week{% endif %}
+              {% set delta_lbs = weight.delta_kg * 2.20462 %}
+              {% if weight.delta_kg < 0 %}{{ "%.1f"|format(delta_lbs) }} lbs ({{ "%.1f"|format(weight.delta_kg) }} kg) this week
+              {% else %}+{{ "%.1f"|format(delta_lbs) }} lbs (+{{ "%.1f"|format(weight.delta_kg) }} kg) this week{% endif %}
             {% endif %}
             {% if weight.body_fat_pct %} · body fat {{ "%.1f"|format(weight.body_fat_pct) }}%{% endif %}
           </div>
