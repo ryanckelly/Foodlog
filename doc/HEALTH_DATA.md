@@ -50,6 +50,9 @@ The full set of data FoodLog pulls today, in one place. Detail tables follow bel
 | Sleep sessions | Pixel Watch | `sleep` | Per-session envelope (start, end, duration; no stages) | Fixed 3-day rolling | `sleep_sessions` |
 | Workouts | Pixel Watch | `exercise` | Per-session: type, duration, distance, calories, avg/max HR | Fixed 14-day rolling | `workouts` |
 | Workout HR samples | Pixel Watch | `heart-rate` | Per-sample (~1/sec), workout window only | Once per new workout in the 14-day window | `workout_hr_samples` |
+| Heart rate (sub-day) | Pixel Watch | `heart-rate` rollUp `900s` | 15-min avg/min/max | Cursor; chunks 14d slices; 90d on empty | `interval_heart_rate` |
+| Activity intervals | Pixel Watch | `steps`/`distance`/`floors` rollUp `900s` | 15-min counters | Cursor; 90d on empty | `interval_activity` |
+| AZM intervals | Pixel Watch | `active-zone-minutes` rollUp `900s` | 15-min by HR zone | Cursor; 90d on empty | `interval_azm` |
 
 All syncs share the same trigger: dashboard load, capped to one fetch per 30 s.
 
