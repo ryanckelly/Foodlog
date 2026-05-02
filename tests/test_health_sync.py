@@ -158,3 +158,35 @@ async def test_sync_interval_heart_rate_upserts_idempotently(db_session, monkeyp
     stored = db_session.query(IntervalHeartRate).all()
     assert len(stored) == 2
     assert stored[0].bpm_avg == 110
+
+
+@pytest.mark.asyncio
+async def test_sync_interval_activity_upserts_with_nullable_columns(db_session):
+    from foodlog.clients.google_health import ActivityIntervalRow
+    from foodlog.db.models import IntervalActivity
+    from foodlog.services.health_sync import HealthSyncService
+
+    rows = [
+        ActivityIntervalRow(
+            start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+            steps=649, distance_m=420.268, floors=None, source="FITBIT",
+        ),
+        ActivityIntervalRow(
+            start_at=datetime.datetime(2026, 4, 12, 12, 15, 0),
+            steps=792, distance_m=628.5, floors=3, source="FITBIT",
+        ),
+    ]
+
+    class StubClient:
+        async def list_activity_intervals(self, since, until=None):
+            for r in rows:
+                yield r
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_interval_activity()
+    assert n == 2
+    stored = db_session.query(IntervalActivity).all()
+    assert len(stored) == 2
+    assert stored[0].steps == 649
+    assert stored[0].floors is None
+    assert stored[1].floors == 3

@@ -339,3 +339,27 @@ class HealthSyncService:
             self._db.execute(stmt)
         self._db.commit()
         return len(rows)
+
+    async def _sync_interval_activity(self) -> int:
+        since = cursor_for(self._db, IntervalActivity, "start_at", DEFAULT_BACKFILL_DAYS)
+        rows = [r async for r in self._client.list_activity_intervals(since=since)]
+        for row in rows:
+            stmt = sqlite_insert(IntervalActivity).values(
+                start_at=row.start_at,
+                steps=row.steps,
+                distance_m=row.distance_m,
+                floors=row.floors,
+                source=row.source,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["start_at"],
+                set_=dict(
+                    steps=row.steps,
+                    distance_m=row.distance_m,
+                    floors=row.floors,
+                    source=row.source,
+                ),
+            )
+            self._db.execute(stmt)
+        self._db.commit()
+        return len(rows)
