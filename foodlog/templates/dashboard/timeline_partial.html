@@ -7,11 +7,11 @@
 </section>
 {% else %}
 <section class="timeline-section" data-day="{{ day.isoformat() }}">
-  <div class="tl-meal-strip">
+  <div class="tl-meal-strip" style="--meal-strip-h: {{ 18 + max_stack_index * 10 }}px">
     {% for m in meal_views %}
       <button type="button"
               class="tl-meal-dot tl-meal-{{ m.meal_type }}"
-              style="left: {{ '%.2f' % m.left_pct }}%"
+              style="left: {{ '%.2f' % m.left_pct }}%; top: {{ 4 + m.stack_index * 10 }}px"
               aria-label="{{ m.meal_type|capitalize }}: {{ m.name }}">
         <span class="tl-meal-tip">{{ m.name }}</span>
       </button>
@@ -32,6 +32,12 @@
       <span class="tl-panel-axis">{{ hr_axis }}</span>
     </div>
     <div class="tl-chart">
+      <div class="tl-gridlines" aria-hidden="true"><span></span><span></span><span></span></div>
+      {% if hr_gridlines %}
+      <div class="tl-y-axis" aria-hidden="true">
+        {% for label in hr_gridlines %}<span>{{ label }}</span>{% endfor %}
+      </div>
+      {% endif %}
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
              style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
@@ -61,6 +67,12 @@
       {% if steps_axis %}<span class="tl-panel-axis">{{ steps_axis }}</span>{% endif %}
     </div>
     <div class="tl-chart">
+      <div class="tl-gridlines" aria-hidden="true"><span></span><span></span><span></span></div>
+      {% if steps_gridlines %}
+      <div class="tl-y-axis" aria-hidden="true">
+        {% for label in steps_gridlines %}<span>{{ label }}</span>{% endfor %}
+      </div>
+      {% endif %}
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
              style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
@@ -83,6 +95,12 @@
       {% if dist_axis %}<span class="tl-panel-axis">{{ dist_axis }}</span>{% endif %}
     </div>
     <div class="tl-chart">
+      <div class="tl-gridlines" aria-hidden="true"><span></span><span></span><span></span></div>
+      {% if dist_gridlines %}
+      <div class="tl-y-axis" aria-hidden="true">
+        {% for label in dist_gridlines %}<span>{{ label }}</span>{% endfor %}
+      </div>
+      {% endif %}
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
              style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
@@ -105,6 +123,12 @@
       {% if floors_axis %}<span class="tl-panel-axis">{{ floors_axis }}</span>{% endif %}
     </div>
     <div class="tl-chart">
+      <div class="tl-gridlines" aria-hidden="true"><span></span><span></span><span></span></div>
+      {% if floors_gridlines %}
+      <div class="tl-y-axis" aria-hidden="true">
+        {% for label in floors_gridlines %}<span>{{ label }}</span>{% endfor %}
+      </div>
+      {% endif %}
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
              style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>
@@ -127,6 +151,12 @@
       {% if azm_axis %}<span class="tl-panel-axis">{{ azm_axis }}</span>{% endif %}
     </div>
     <div class="tl-chart">
+      <div class="tl-gridlines" aria-hidden="true"><span></span><span></span><span></span></div>
+      {% if azm_gridlines %}
+      <div class="tl-y-axis" aria-hidden="true">
+        {% for label in azm_gridlines %}<span>{{ label }}</span>{% endfor %}
+      </div>
+      {% endif %}
       {% for w in workout_views %}
         <div class="tl-workout-band{{ ' tl-workout-focused' if w.is_focused else '' }}"
              style="left: {{ '%.2f' % w.left_pct }}%; right: {{ '%.2f' % w.right_pct }}%"></div>

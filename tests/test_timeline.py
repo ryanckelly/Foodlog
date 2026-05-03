@@ -206,3 +206,137 @@ def test_timeline_future_day_shows_empty_state(db_session):
     r = client.get(f"/dashboard/timeline?date={future.isoformat()}")
     assert r.status_code == 200
     assert "no data" in r.text.lower()
+
+
+def test_timeline_stacks_overlapping_meal_dots(db_session):
+    """Two meals at the same logged_at should render at distinct stack indices
+    so each remains visually and click-targetable separately."""
+    from foodlog.api.app import create_app
+    from foodlog.db.models import FoodEntry
+
+    same_ts = datetime.datetime(2026, 4, 12, 13, 0, 0)
+    db_session.add(FoodEntry(
+        meal_type="lunch", food_name="Beef Pho",
+        quantity=1, unit="bowl",
+        calories=400, protein_g=20, carbs_g=30, fat_g=10,
+        source="manual", raw_input="pho", logged_at=same_ts,
+    ))
+    db_session.add(FoodEntry(
+        meal_type="lunch", food_name="Beef Banh Mi",
+        quantity=1, unit="sandwich",
+        calories=500, protein_g=22, carbs_g=55, fat_g=15,
+        source="manual", raw_input="banh mi", logged_at=same_ts,
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    # First dot at top:4px (stack 0), second at top:14px (stack 1). The closing
+    # quote disambiguates from CSS rules that use `top: Npx;` instead.
+    assert 'top: 4px"' in r.text
+    assert 'top: 14px"' in r.text
+    # Strip height grew from base 18px to 28px (one extra stack row).
+    assert "--meal-strip-h: 28px" in r.text
+
+
+def test_timeline_does_not_stack_distant_meals(db_session):
+    """Meals well-separated horizontally should all sit on the same row (top:4px)."""
+    from foodlog.api.app import create_app
+    from foodlog.db.models import FoodEntry
+
+    db_session.add(FoodEntry(
+        meal_type="breakfast", food_name="Oatmeal",
+        quantity=1, unit="bowl",
+        calories=300, protein_g=10, carbs_g=50, fat_g=5,
+        source="manual", raw_input="oats",
+        logged_at=datetime.datetime(2026, 4, 12, 8, 0, 0),
+    ))
+    db_session.add(FoodEntry(
+        meal_type="dinner", food_name="Pasta",
+        quantity=1, unit="plate",
+        calories=600, protein_g=20, carbs_g=80, fat_g=15,
+        source="manual", raw_input="pasta",
+        logged_at=datetime.datetime(2026, 4, 12, 19, 0, 0),
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    # Both dots should be on row 0 → inline style `top: 4px"` appears twice;
+    # the stack-1 form `top: 14px"` should never appear (CSS rules using
+    # `top: 14px;` for the tooltip are excluded by the trailing quote).
+    assert r.text.count('top: 4px"') == 2
+    assert 'top: 14px"' not in r.text
+    # Strip stays at base height.
+    assert "--meal-strip-h: 18px" in r.text
+
+
+def test_timeline_renders_hr_gridline_labels(db_session):
+    """HR chart should show fixed-range gridline labels in bpm regardless of data values."""
+    from foodlog.api.app import create_app
+    from foodlog.db.models import IntervalHeartRate
+
+    db_session.add(IntervalHeartRate(
+        start_at=datetime.datetime(2026, 4, 12, 10, 0, 0),
+        bpm_avg=110, bpm_min=90, bpm_max=130, source="FITBIT",
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    # 25/50/75/100% of the 40-180 range = 75/110/145/180 bpm
+    for label in ("75 bpm", "110 bpm", "145 bpm", "180 bpm"):
+        assert label in r.text
+    # And the gridline overlay containers are present
+    assert 'class="tl-gridlines"' in r.text
+    assert 'class="tl-y-axis"' in r.text
+
+
+def test_timeline_steps_gridline_labels_round_to_nearest_1k(db_session):
+    """Steps gridline labels are quartiles of the peak rounded to the nearest 1,000."""
+    from foodlog.api.app import create_app
+    from foodlog.db.models import IntervalActivity
+
+    # Peak = 8534 → quartiles 2133.5/4267/6400.5/8534 → round-to-1k 2000/4000/6000/9000
+    db_session.add(IntervalActivity(
+        start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+        steps=8534, distance_m=None, floors=None, source="FITBIT",
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    # Render the y-axis labels exactly. Use specific surrounding markup so we
+    # don't accidentally match e.g. the data-steps attribute.
+    for label in (">2,000<", ">4,000<", ">6,000<", ">9,000<"):
+        assert label in r.text
+
+
+def test_timeline_renders_gridlines_per_chart(db_session):
+    """Every rendered chart panel should embed the 3-line gridline overlay."""
+    from foodlog.api.app import create_app
+    from foodlog.db.models import IntervalHeartRate, IntervalActivity, IntervalAzm
+
+    db_session.add(IntervalHeartRate(
+        start_at=datetime.datetime(2026, 4, 12, 10, 0, 0),
+        bpm_avg=110, bpm_min=90, bpm_max=130, source="FITBIT",
+    ))
+    db_session.add(IntervalActivity(
+        start_at=datetime.datetime(2026, 4, 12, 12, 0, 0),
+        steps=4000, distance_m=3000.0, floors=8, source="FITBIT",
+    ))
+    db_session.add(IntervalAzm(
+        start_at=datetime.datetime(2026, 4, 12, 12, 35, 0),
+        fat_burn_min=12, cardio_min=2, peak_min=2, source="FITBIT",
+    ))
+    db_session.commit()
+
+    client = TestClient(create_app())
+    r = client.get("/dashboard/timeline?date=2026-04-12")
+    assert r.status_code == 200
+    # 5 chart panels (HR/steps/distance/floors/azm) → 5 gridline overlays.
+    assert r.text.count('class="tl-gridlines"') == 5

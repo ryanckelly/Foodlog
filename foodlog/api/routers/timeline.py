@@ -31,6 +31,40 @@ def _pct(value: int, lo: int, hi: int) -> float:
     return max(0.0, min(100.0, (value - lo) / (hi - lo) * 100.0))
 
 
+def _round_to_nearest(value: float, step: int) -> int:
+    return int(round(value / step) * step)
+
+
+def _hr_gridlines(lo: int, hi: int) -> list[str]:
+    span = hi - lo
+    return [f"{round(lo + span * i / 4)} bpm" for i in (1, 2, 3, 4)]
+
+
+def _steps_gridlines(peak: int) -> list[str]:
+    if not peak:
+        return []
+    return [f"{_round_to_nearest(peak * i / 4, 1000):,}" for i in (1, 2, 3, 4)]
+
+
+def _dist_gridlines(peak_m: float) -> list[str]:
+    if not peak_m:
+        return []
+    peak_mi = peak_m * 0.000621371
+    return [f"{peak_mi * i / 4:.2f} mi" for i in (1, 2, 3, 4)]
+
+
+def _floors_gridlines(peak: int) -> list[str]:
+    if not peak:
+        return []
+    return [f"{int(round(peak * i / 4))}" for i in (1, 2, 3, 4)]
+
+
+def _azm_gridlines(peak: int) -> list[str]:
+    if not peak:
+        return []
+    return [f"{int(round(peak * i / 4))} min" for i in (1, 2, 3, 4)]
+
+
 def _is_focused(focus: str | None, start: datetime.datetime, end: datetime.datetime) -> bool:
     if not focus:
         return False
@@ -172,6 +206,22 @@ def timeline(
         }
         for m in meals
     ]
+    # Stagger overlapping meal dots vertically so each remains tappable.
+    # Greedy stack assignment: each dot picks the lowest stack level whose
+    # last-placed dot is more than MEAL_STACK_THRESHOLD_PCT away horizontally.
+    meal_views.sort(key=lambda m: m["left_pct"])
+    MEAL_STACK_THRESHOLD_PCT = 1.5
+    stack_last_left: list[float] = []  # last left_pct placed at each stack index
+    for m in meal_views:
+        for i, last in enumerate(stack_last_left):
+            if m["left_pct"] - last > MEAL_STACK_THRESHOLD_PCT:
+                m["stack_index"] = i
+                stack_last_left[i] = m["left_pct"]
+                break
+        else:
+            m["stack_index"] = len(stack_last_left)
+            stack_last_left.append(m["left_pct"])
+    max_stack_index = (len(stack_last_left) - 1) if stack_last_left else 0
 
     has_data = (
         any(s is not None for s in hr_slots)
@@ -196,7 +246,15 @@ def timeline(
         dist_axis = ""
     floors_peak = max((v for v in floors_slots if v), default=0)
     floors_axis = f"peak {floors_peak}" if floors_peak else ""
-    azm_axis = f"peak {azm_peak_total} min" if any(azm_slots) else ""
+    azm_has_data = any(azm_slots)
+    azm_axis = f"peak {azm_peak_total} min" if azm_has_data else ""
+
+    # Per-chart gridline labels (rendered at 25/50/75/100% of chart height).
+    hr_gridlines = _hr_gridlines(HR_MIN, HR_MAX)
+    steps_gridlines = _steps_gridlines(steps_peak)
+    dist_gridlines = _dist_gridlines(dist_peak_m)
+    floors_gridlines = _floors_gridlines(floors_peak)
+    azm_gridlines = _azm_gridlines(azm_peak_total) if azm_has_data else []
 
     return templates.TemplateResponse(
         request=request,
@@ -217,11 +275,17 @@ def timeline(
             "azm_slots": azm_slots,
             "workout_views": workout_views,
             "meal_views": meal_views,
+            "max_stack_index": max_stack_index,
             "hr_axis": hr_axis,
             "steps_axis": steps_axis,
             "dist_axis": dist_axis,
             "floors_axis": floors_axis,
             "azm_axis": azm_axis,
+            "hr_gridlines": hr_gridlines,
+            "steps_gridlines": steps_gridlines,
+            "dist_gridlines": dist_gridlines,
+            "floors_gridlines": floors_gridlines,
+            "azm_gridlines": azm_gridlines,
             "one_day": datetime.timedelta(days=1),
         },
     )

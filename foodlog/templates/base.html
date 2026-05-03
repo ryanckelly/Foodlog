@@ -553,7 +553,7 @@
 
         .tl-meal-strip {
             position: relative;
-            height: 18px;
+            height: var(--meal-strip-h, 18px);
             margin-bottom: 6px;
         }
         button.tl-meal-dot {
@@ -621,6 +621,45 @@
         .hr-col, .steps-col, .dist-col, .floors-col, .azm-col {
             z-index: 2;  /* on top of workout band */
         }
+
+        .tl-gridlines {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+        .tl-gridlines > span {
+            position: absolute;
+            left: 0; right: 0;
+            height: 0;
+            border-top: 1px dashed rgba(0, 0, 0, 0.08);
+        }
+        .tl-gridlines > span:nth-child(1) { bottom: 25%; }
+        .tl-gridlines > span:nth-child(2) { bottom: 50%; }
+        .tl-gridlines > span:nth-child(3) { bottom: 75%; }
+
+        .tl-y-axis {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 4;
+            font-size: 9px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+        .tl-y-axis > span {
+            position: absolute;
+            left: 2px;
+            background: var(--bg-sunk);
+            padding: 1px 4px;
+            border-radius: 2px;
+            white-space: nowrap;
+            transform: translateY(50%);
+        }
+        .tl-y-axis > span:nth-child(1) { bottom: 25%; }
+        .tl-y-axis > span:nth-child(2) { bottom: 50%; }
+        .tl-y-axis > span:nth-child(3) { bottom: 75%; }
+        .tl-y-axis > span:nth-child(4) { bottom: 100%; }
 
         .tl-xaxis {
             display: flex;
