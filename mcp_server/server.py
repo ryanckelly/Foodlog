@@ -16,6 +16,12 @@ from foodlog.api.dependencies import (
     get_usda_client,
 )
 from foodlog.config import settings
+from foodlog.db.models import (
+    DailyActivity,
+    RestingHeartRate,
+    SleepSession,
+    Workout,
+)
 from foodlog.models.schemas import (
     FoodEntryCreate,
     FoodEntryResponse,
@@ -32,7 +38,32 @@ TOOL_REQUIRED_SCOPES = {
     "log_food": ["foodlog.write"],
     "edit_entry": ["foodlog.write"],
     "delete_entry": ["foodlog.write"],
+    "get_daily_activity": ["foodlog.read"],
+    "get_sleep": ["foodlog.read"],
+    "get_resting_heart_rate": ["foodlog.read"],
+    "get_workouts": ["foodlog.read"],
 }
+
+MAX_RANGE_DAYS = 90
+
+
+def _resolve_range(
+    start_date: str | None,
+    end_date: str | None,
+    default_lookback_days: int,
+) -> tuple[datetime.date, datetime.date]:
+    today = datetime.date.today()
+    end = datetime.date.fromisoformat(end_date) if end_date else today
+    if start_date:
+        start = datetime.date.fromisoformat(start_date)
+    else:
+        start = end - datetime.timedelta(days=default_lookback_days)
+    if start > end:
+        raise ValueError("start_date must be on or before end_date")
+    span = (end - start).days
+    if span > MAX_RANGE_DAYS:
+        raise ValueError(f"Range exceeds {MAX_RANGE_DAYS} days (got {span})")
+    return start, end
 
 
 def _require_scope(scope: str) -> None:
@@ -108,7 +139,11 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         instructions=(
             "Food logging assistant. Use search_food to find nutrition data, "
             "then log_food to record meals. Use get_daily_summary to show totals. "
-            "Always search before logging to get accurate nutrition values."
+            "Always search before logging to get accurate nutrition values. "
+            "Synced health data is also available read-only: get_daily_activity "
+            "(steps + active calories), get_sleep (sleep sessions), "
+            "get_resting_heart_rate (daily resting HR), and get_workouts "
+            "(workouts with optional HR samples)."
         ),
         streamable_http_path="/mcp",
         auth=auth_settings,
@@ -236,6 +271,170 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             svc = SummaryService(session)
             result = svc.daily(target_date)
             return result.model_dump(mode="json")
+
+    @mcp.tool()
+    def get_daily_activity(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict]:
+        """Get daily step counts and active calories burned from synced health data.
+
+        Sourced from Google Health (Fitbit, Wear OS, etc.). Defaults to today only.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=0)
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(DailyActivity)
+                .filter(DailyActivity.date >= start, DailyActivity.date <= end)
+                .order_by(DailyActivity.date.asc())
+                .all()
+            )
+            return [
+                {
+                    "date": r.date.isoformat(),
+                    "steps": r.steps,
+                    "active_calories_kcal": r.active_calories_kcal,
+                    "source": r.source,
+                }
+                for r in rows
+            ]
+
+    @mcp.tool()
+    def get_sleep(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict]:
+        """Get sleep sessions (start time, end time, duration) for a date range.
+
+        Filters by the session's start date. Defaults to the last 7 days.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=7)
+        start_dt = datetime.datetime.combine(start, datetime.time.min)
+        end_dt = datetime.datetime.combine(
+            end + datetime.timedelta(days=1), datetime.time.min
+        )
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(SleepSession)
+                .filter(
+                    SleepSession.start_at >= start_dt,
+                    SleepSession.start_at < end_dt,
+                )
+                .order_by(SleepSession.start_at.asc())
+                .all()
+            )
+            return [
+                {
+                    "start_at": r.start_at.isoformat(),
+                    "end_at": r.end_at.isoformat(),
+                    "duration_min": r.duration_min,
+                    "source": r.source,
+                }
+                for r in rows
+            ]
+
+    @mcp.tool()
+    def get_resting_heart_rate(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict]:
+        """Get daily resting heart rate readings (BPM) for a date range.
+
+        Defaults to the last 7 days.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=7)
+        start_dt = datetime.datetime.combine(start, datetime.time.min)
+        end_dt = datetime.datetime.combine(
+            end + datetime.timedelta(days=1), datetime.time.min
+        )
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(RestingHeartRate)
+                .filter(
+                    RestingHeartRate.measured_at >= start_dt,
+                    RestingHeartRate.measured_at < end_dt,
+                )
+                .order_by(RestingHeartRate.measured_at.asc())
+                .all()
+            )
+            return [
+                {
+                    "measured_at": r.measured_at.isoformat(),
+                    "bpm": r.bpm,
+                    "source": r.source,
+                }
+                for r in rows
+            ]
+
+    @mcp.tool()
+    def get_workouts(
+        start_date: str | None = None,
+        end_date: str | None = None,
+        include_hr_samples: bool = False,
+    ) -> list[dict]:
+        """Get workouts (type, duration, distance, calories, avg/max HR) for a date range.
+
+        Filters by the workout's start date. Defaults to the last 7 days.
+        Heart-rate sample arrays are excluded by default since they can be large
+        (one reading per minute or so) — pass include_hr_samples=true to include them.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+            include_hr_samples: Include per-minute HR samples for each workout (default: false)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=7)
+        start_dt = datetime.datetime.combine(start, datetime.time.min)
+        end_dt = datetime.datetime.combine(
+            end + datetime.timedelta(days=1), datetime.time.min
+        )
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(Workout)
+                .filter(
+                    Workout.start_at >= start_dt,
+                    Workout.start_at < end_dt,
+                )
+                .order_by(Workout.start_at.asc())
+                .all()
+            )
+            results = []
+            for w in rows:
+                item = {
+                    "start_at": w.start_at.isoformat(),
+                    "end_at": w.end_at.isoformat(),
+                    "activity_type": w.activity_type,
+                    "duration_min": w.duration_min,
+                    "calories_kcal": w.calories_kcal,
+                    "distance_m": w.distance_m,
+                    "avg_hr": w.avg_hr,
+                    "max_hr": w.max_hr,
+                    "source": w.source,
+                }
+                if include_hr_samples:
+                    item["hr_samples"] = [
+                        {"sample_at": s.sample_at.isoformat(), "bpm": s.bpm}
+                        for s in w.hr_samples
+                    ]
+                results.append(item)
+            return results
 
     return mcp
 

@@ -1,7 +1,16 @@
+import datetime
+
 import pytest
 from mcp.server.auth.provider import AccessToken
 from mcp.server.fastmcp import FastMCP
 
+from foodlog.db.models import (
+    DailyActivity,
+    RestingHeartRate,
+    SleepSession,
+    Workout,
+    WorkoutHrSample,
+)
 from foodlog.services.oauth import FoodLogOAuthProvider, FoodLogTokenVerifier
 from mcp_server.server import create_mcp_server
 
@@ -16,6 +25,10 @@ def test_mcp_server_has_tools():
     assert "edit_entry" in tool_names
     assert "delete_entry" in tool_names
     assert "get_daily_summary" in tool_names
+    assert "get_daily_activity" in tool_names
+    assert "get_sleep" in tool_names
+    assert "get_resting_heart_rate" in tool_names
+    assert "get_workouts" in tool_names
 
 
 def test_mcp_server_can_enable_oauth(db_session):
@@ -47,6 +60,10 @@ def test_mcp_tool_scope_policy_is_declared():
     assert TOOL_REQUIRED_SCOPES["log_food"] == ["foodlog.write"]
     assert TOOL_REQUIRED_SCOPES["edit_entry"] == ["foodlog.write"]
     assert TOOL_REQUIRED_SCOPES["delete_entry"] == ["foodlog.write"]
+    assert TOOL_REQUIRED_SCOPES["get_daily_activity"] == ["foodlog.read"]
+    assert TOOL_REQUIRED_SCOPES["get_sleep"] == ["foodlog.read"]
+    assert TOOL_REQUIRED_SCOPES["get_resting_heart_rate"] == ["foodlog.read"]
+    assert TOOL_REQUIRED_SCOPES["get_workouts"] == ["foodlog.read"]
 
 
 def test_require_scope_allows_matching_scope(monkeypatch):
@@ -84,3 +101,142 @@ def test_require_scope_rejects_missing_scope(monkeypatch):
 
     with pytest.raises(PermissionError, match="Missing required scope"):
         server._require_scope("foodlog.write")
+
+
+def _get_tool(mcp, name):
+    for t in mcp._tool_manager.list_tools():
+        if t.name == name:
+            return t.fn
+    raise AssertionError(f"tool {name} not registered")
+
+
+def test_get_daily_activity_returns_rows_in_range(db_session):
+    db_session.add_all([
+        DailyActivity(
+            date=datetime.date(2026, 5, 1),
+            steps=8000,
+            active_calories_kcal=300.0,
+            source="watch",
+            external_id="da-1",
+        ),
+        DailyActivity(
+            date=datetime.date(2026, 5, 2),
+            steps=12000,
+            active_calories_kcal=520.0,
+            source="watch",
+            external_id="da-2",
+        ),
+        DailyActivity(
+            date=datetime.date(2026, 5, 3),
+            steps=4000,
+            active_calories_kcal=150.0,
+            source="watch",
+            external_id="da-3",
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_daily_activity")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-02")
+    assert [r["date"] for r in rows] == ["2026-05-01", "2026-05-02"]
+    assert rows[0]["steps"] == 8000
+    assert rows[1]["active_calories_kcal"] == 520.0
+
+
+def test_get_sleep_filters_by_start_at(db_session):
+    db_session.add_all([
+        SleepSession(
+            external_id="s-1",
+            start_at=datetime.datetime(2026, 5, 1, 23, 0),
+            end_at=datetime.datetime(2026, 5, 2, 7, 0),
+            duration_min=480,
+            source="watch",
+        ),
+        SleepSession(
+            external_id="s-2",
+            start_at=datetime.datetime(2026, 5, 5, 23, 30),
+            end_at=datetime.datetime(2026, 5, 6, 6, 30),
+            duration_min=420,
+            source="watch",
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_sleep")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-01")
+    assert len(rows) == 1
+    assert rows[0]["duration_min"] == 480
+
+
+def test_get_resting_heart_rate_returns_in_range(db_session):
+    db_session.add_all([
+        RestingHeartRate(
+            external_id="r-1",
+            measured_at=datetime.datetime(2026, 5, 1, 6, 0),
+            bpm=58,
+            source="watch",
+        ),
+        RestingHeartRate(
+            external_id="r-2",
+            measured_at=datetime.datetime(2026, 5, 9, 6, 0),
+            bpm=61,
+            source="watch",
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_resting_heart_rate")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-02")
+    assert len(rows) == 1
+    assert rows[0]["bpm"] == 58
+
+
+def test_get_workouts_excludes_hr_samples_by_default(db_session):
+    workout = Workout(
+        external_id="w-1",
+        start_at=datetime.datetime(2026, 5, 2, 17, 0),
+        end_at=datetime.datetime(2026, 5, 2, 17, 42),
+        activity_type="run",
+        duration_min=42,
+        calories_kcal=410.0,
+        distance_m=6800.0,
+        avg_hr=152,
+        max_hr=174,
+        source="watch",
+    )
+    db_session.add(workout)
+    db_session.flush()
+    db_session.add_all([
+        WorkoutHrSample(workout_id="w-1", sample_at=datetime.datetime(2026, 5, 2, 17, 5), bpm=148),
+        WorkoutHrSample(workout_id="w-1", sample_at=datetime.datetime(2026, 5, 2, 17, 6), bpm=149),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_workouts")
+    rows = fn(start_date="2026-05-02", end_date="2026-05-02")
+    assert len(rows) == 1
+    assert rows[0]["activity_type"] == "run"
+    assert rows[0]["distance_m"] == 6800.0
+    assert "hr_samples" not in rows[0]
+
+    rows_with = fn(start_date="2026-05-02", end_date="2026-05-02", include_hr_samples=True)
+    assert len(rows_with[0]["hr_samples"]) == 2
+    assert rows_with[0]["hr_samples"][0]["bpm"] == 148
+
+
+def test_resolve_range_rejects_inverted_dates():
+    from mcp_server.server import _resolve_range
+
+    with pytest.raises(ValueError, match="start_date must be on or before"):
+        _resolve_range("2026-05-10", "2026-05-01", default_lookback_days=7)
+
+
+def test_resolve_range_caps_max_window():
+    from mcp_server.server import _resolve_range
+
+    with pytest.raises(ValueError, match="Range exceeds"):
+        _resolve_range("2025-01-01", "2026-05-01", default_lookback_days=7)
