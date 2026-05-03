@@ -17,6 +17,7 @@ from foodlog.api.dependencies import (
 )
 from foodlog.config import settings
 from foodlog.db.models import (
+    BodyComposition,
     DailyActivity,
     RestingHeartRate,
     SleepSession,
@@ -42,6 +43,7 @@ TOOL_REQUIRED_SCOPES = {
     "get_sleep": ["foodlog.read"],
     "get_resting_heart_rate": ["foodlog.read"],
     "get_workouts": ["foodlog.read"],
+    "get_body_weight": ["foodlog.read"],
 }
 
 MAX_RANGE_DAYS = 90
@@ -142,8 +144,9 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             "Always search before logging to get accurate nutrition values. "
             "Synced health data is also available read-only: get_daily_activity "
             "(steps + active calories), get_sleep (sleep sessions), "
-            "get_resting_heart_rate (daily resting HR), and get_workouts "
-            "(workouts with optional HR samples)."
+            "get_resting_heart_rate (daily resting HR), get_workouts "
+            "(workouts with optional HR samples), and get_body_weight "
+            "(body weight readings in kg)."
         ),
         streamable_http_path="/mcp",
         auth=auth_settings,
@@ -435,6 +438,47 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                     ]
                 results.append(item)
             return results
+
+    @mcp.tool()
+    def get_body_weight(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict]:
+        """Get body weight readings (in kilograms) for a date range.
+
+        Sourced from Google Health (smart scales, manual entries, etc.).
+        Defaults to the last 90 days. Readings without a recorded weight
+        value (body-fat-only entries) are omitted.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 90 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=90)
+        start_dt = datetime.datetime.combine(start, datetime.time.min)
+        end_dt = datetime.datetime.combine(
+            end + datetime.timedelta(days=1), datetime.time.min
+        )
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(BodyComposition)
+                .filter(
+                    BodyComposition.measured_at >= start_dt,
+                    BodyComposition.measured_at < end_dt,
+                    BodyComposition.weight_kg.isnot(None),
+                )
+                .order_by(BodyComposition.measured_at.asc())
+                .all()
+            )
+            return [
+                {
+                    "measured_at": r.measured_at.isoformat(),
+                    "weight_kg": r.weight_kg,
+                    "source": r.source,
+                }
+                for r in rows
+            ]
 
     return mcp
 

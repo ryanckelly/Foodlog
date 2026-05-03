@@ -5,6 +5,7 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.fastmcp import FastMCP
 
 from foodlog.db.models import (
+    BodyComposition,
     DailyActivity,
     RestingHeartRate,
     SleepSession,
@@ -29,6 +30,7 @@ def test_mcp_server_has_tools():
     assert "get_sleep" in tool_names
     assert "get_resting_heart_rate" in tool_names
     assert "get_workouts" in tool_names
+    assert "get_body_weight" in tool_names
 
 
 def test_mcp_server_can_enable_oauth(db_session):
@@ -64,6 +66,7 @@ def test_mcp_tool_scope_policy_is_declared():
     assert TOOL_REQUIRED_SCOPES["get_sleep"] == ["foodlog.read"]
     assert TOOL_REQUIRED_SCOPES["get_resting_heart_rate"] == ["foodlog.read"]
     assert TOOL_REQUIRED_SCOPES["get_workouts"] == ["foodlog.read"]
+    assert TOOL_REQUIRED_SCOPES["get_body_weight"] == ["foodlog.read"]
 
 
 def test_require_scope_allows_matching_scope(monkeypatch):
@@ -226,6 +229,70 @@ def test_get_workouts_excludes_hr_samples_by_default(db_session):
     rows_with = fn(start_date="2026-05-02", end_date="2026-05-02", include_hr_samples=True)
     assert len(rows_with[0]["hr_samples"]) == 2
     assert rows_with[0]["hr_samples"][0]["bpm"] == 148
+
+
+def test_get_body_weight_returns_rows_in_range_ordered(db_session):
+    db_session.add_all([
+        BodyComposition(
+            external_id="bw-2",
+            measured_at=datetime.datetime(2026, 5, 2, 7, 30),
+            weight_kg=78.4,
+            body_fat_pct=None,
+            source="scale",
+        ),
+        BodyComposition(
+            external_id="bw-1",
+            measured_at=datetime.datetime(2026, 5, 1, 7, 15),
+            weight_kg=78.7,
+            body_fat_pct=21.0,
+            source="scale",
+        ),
+        BodyComposition(
+            external_id="bw-out",
+            measured_at=datetime.datetime(2026, 5, 9, 7, 0),
+            weight_kg=78.1,
+            body_fat_pct=None,
+            source="scale",
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_body_weight")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-02")
+    assert [r["measured_at"] for r in rows] == [
+        "2026-05-01T07:15:00",
+        "2026-05-02T07:30:00",
+    ]
+    assert rows[0]["weight_kg"] == 78.7
+    assert rows[0]["source"] == "scale"
+    assert "body_fat_pct" not in rows[0]
+
+
+def test_get_body_weight_omits_null_weight(db_session):
+    db_session.add_all([
+        BodyComposition(
+            external_id="bw-fat-only",
+            measured_at=datetime.datetime(2026, 5, 1, 7, 0),
+            weight_kg=None,
+            body_fat_pct=22.5,
+            source="scale",
+        ),
+        BodyComposition(
+            external_id="bw-real",
+            measured_at=datetime.datetime(2026, 5, 1, 7, 1),
+            weight_kg=78.2,
+            body_fat_pct=None,
+            source="scale",
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_body_weight")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-01")
+    assert len(rows) == 1
+    assert rows[0]["weight_kg"] == 78.2
 
 
 def test_resolve_range_rejects_inverted_dates():
