@@ -155,7 +155,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
     )
 
     @mcp.tool()
-    async def search_food(query: str) -> list[dict]:
+    async def search_food(query: str) -> dict:
         """Search the nutrition database for a food item.
 
         Returns matches with calories and macros per serving.
@@ -170,10 +170,10 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             usda=get_usda_client(),
         )
         results = await svc.search(query)
-        return [r.model_dump() for r in results]
+        return {"items": [r.model_dump() for r in results]}
 
     @mcp.tool()
-    def log_food(entries: list[dict]) -> list[dict]:
+    def log_food(entries: list[dict]) -> dict:
         """Log one or more food items to the diary.
 
         Use after searching to include accurate nutrition data.
@@ -191,15 +191,17 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         with session_factory() as session:
             svc = EntryService(session)
             results = svc.create_many(models)
-            return [
-                FoodEntryResponse.model_validate(r).model_dump(mode="json")
-                for r in results
-            ]
+            return {
+                "items": [
+                    FoodEntryResponse.model_validate(r).model_dump(mode="json")
+                    for r in results
+                ]
+            }
 
     @mcp.tool()
     def get_entries(
         date: str | None = None, meal_type: str | None = None
-    ) -> list[dict]:
+    ) -> dict:
         """Get food diary entries. Defaults to today.
 
         Use to show the user what they've logged or to check before adding duplicates.
@@ -216,10 +218,12 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         with session_factory() as session:
             svc = EntryService(session)
             results = svc.get_by_date(target_date, meal_type=meal_type)
-            return [
-                FoodEntryResponse.model_validate(r).model_dump(mode="json")
-                for r in results
-            ]
+            return {
+                "items": [
+                    FoodEntryResponse.model_validate(r).model_dump(mode="json")
+                    for r in results
+                ]
+            }
 
     @mcp.tool()
     def edit_entry(entry_id: int, updates: dict) -> dict:
@@ -278,7 +282,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
     @mcp.tool()
     def get_daily_activity(
         start_date: str | None = None, end_date: str | None = None
-    ) -> list[dict]:
+    ) -> dict:
         """Get daily step counts and active calories burned from synced health data.
 
         Sourced from Google Health (Fitbit, Wear OS, etc.). Defaults to today only.
@@ -297,20 +301,22 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                 .order_by(DailyActivity.date.asc())
                 .all()
             )
-            return [
-                {
-                    "date": r.date.isoformat(),
-                    "steps": r.steps,
-                    "active_calories_kcal": r.active_calories_kcal,
-                    "source": r.source,
-                }
-                for r in rows
-            ]
+            return {
+                "items": [
+                    {
+                        "date": r.date.isoformat(),
+                        "steps": r.steps,
+                        "active_calories_kcal": r.active_calories_kcal,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
 
     @mcp.tool()
     def get_sleep(
         start_date: str | None = None, end_date: str | None = None
-    ) -> list[dict]:
+    ) -> dict:
         """Get sleep sessions (start time, end time, duration) for a date range.
 
         Filters by the session's start date. Defaults to the last 7 days.
@@ -336,20 +342,22 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                 .order_by(SleepSession.start_at.asc())
                 .all()
             )
-            return [
-                {
-                    "start_at": r.start_at.isoformat(),
-                    "end_at": r.end_at.isoformat(),
-                    "duration_min": r.duration_min,
-                    "source": r.source,
-                }
-                for r in rows
-            ]
+            return {
+                "items": [
+                    {
+                        "start_at": r.start_at.isoformat(),
+                        "end_at": r.end_at.isoformat(),
+                        "duration_min": r.duration_min,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
 
     @mcp.tool()
     def get_resting_heart_rate(
         start_date: str | None = None, end_date: str | None = None
-    ) -> list[dict]:
+    ) -> dict:
         """Get daily resting heart rate readings (BPM) for a date range.
 
         Defaults to the last 7 days.
@@ -375,21 +383,23 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                 .order_by(RestingHeartRate.measured_at.asc())
                 .all()
             )
-            return [
-                {
-                    "measured_at": r.measured_at.isoformat(),
-                    "bpm": r.bpm,
-                    "source": r.source,
-                }
-                for r in rows
-            ]
+            return {
+                "items": [
+                    {
+                        "measured_at": r.measured_at.isoformat(),
+                        "bpm": r.bpm,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
 
     @mcp.tool()
     def get_workouts(
         start_date: str | None = None,
         end_date: str | None = None,
         include_hr_samples: bool = False,
-    ) -> list[dict]:
+    ) -> dict:
         """Get workouts (type, duration, distance, calories, avg/max HR) for a date range.
 
         Filters by the workout's start date. Defaults to the last 7 days.
@@ -437,12 +447,12 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                         for s in w.hr_samples
                     ]
                 results.append(item)
-            return results
+            return {"items": results}
 
     @mcp.tool()
     def get_body_weight(
         start_date: str | None = None, end_date: str | None = None
-    ) -> list[dict]:
+    ) -> dict:
         """Get body weight readings (in kilograms) for a date range.
 
         Sourced from Google Health (smart scales, manual entries, etc.).
@@ -471,14 +481,16 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                 .order_by(BodyComposition.measured_at.asc())
                 .all()
             )
-            return [
-                {
-                    "measured_at": r.measured_at.isoformat(),
-                    "weight_kg": r.weight_kg,
-                    "source": r.source,
-                }
-                for r in rows
-            ]
+            return {
+                "items": [
+                    {
+                        "measured_at": r.measured_at.isoformat(),
+                        "weight_kg": r.weight_kg,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
 
     return mcp
 

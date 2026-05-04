@@ -141,7 +141,8 @@ def test_get_daily_activity_returns_rows_in_range(db_session):
 
     mcp = create_mcp_server()
     fn = _get_tool(mcp, "get_daily_activity")
-    rows = fn(start_date="2026-05-01", end_date="2026-05-02")
+    result = fn(start_date="2026-05-01", end_date="2026-05-02")
+    rows = result["items"]
     assert [r["date"] for r in rows] == ["2026-05-01", "2026-05-02"]
     assert rows[0]["steps"] == 8000
     assert rows[1]["active_calories_kcal"] == 520.0
@@ -168,7 +169,8 @@ def test_get_sleep_filters_by_start_at(db_session):
 
     mcp = create_mcp_server()
     fn = _get_tool(mcp, "get_sleep")
-    rows = fn(start_date="2026-05-01", end_date="2026-05-01")
+    result = fn(start_date="2026-05-01", end_date="2026-05-01")
+    rows = result["items"]
     assert len(rows) == 1
     assert rows[0]["duration_min"] == 480
 
@@ -192,7 +194,8 @@ def test_get_resting_heart_rate_returns_in_range(db_session):
 
     mcp = create_mcp_server()
     fn = _get_tool(mcp, "get_resting_heart_rate")
-    rows = fn(start_date="2026-05-01", end_date="2026-05-02")
+    result = fn(start_date="2026-05-01", end_date="2026-05-02")
+    rows = result["items"]
     assert len(rows) == 1
     assert rows[0]["bpm"] == 58
 
@@ -220,13 +223,15 @@ def test_get_workouts_excludes_hr_samples_by_default(db_session):
 
     mcp = create_mcp_server()
     fn = _get_tool(mcp, "get_workouts")
-    rows = fn(start_date="2026-05-02", end_date="2026-05-02")
+    rows = fn(start_date="2026-05-02", end_date="2026-05-02")["items"]
     assert len(rows) == 1
     assert rows[0]["activity_type"] == "run"
     assert rows[0]["distance_m"] == 6800.0
     assert "hr_samples" not in rows[0]
 
-    rows_with = fn(start_date="2026-05-02", end_date="2026-05-02", include_hr_samples=True)
+    rows_with = fn(
+        start_date="2026-05-02", end_date="2026-05-02", include_hr_samples=True
+    )["items"]
     assert len(rows_with[0]["hr_samples"]) == 2
     assert rows_with[0]["hr_samples"][0]["bpm"] == 148
 
@@ -259,7 +264,7 @@ def test_get_body_weight_returns_rows_in_range_ordered(db_session):
 
     mcp = create_mcp_server()
     fn = _get_tool(mcp, "get_body_weight")
-    rows = fn(start_date="2026-05-01", end_date="2026-05-02")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-02")["items"]
     assert [r["measured_at"] for r in rows] == [
         "2026-05-01T07:15:00",
         "2026-05-02T07:30:00",
@@ -290,7 +295,7 @@ def test_get_body_weight_omits_null_weight(db_session):
 
     mcp = create_mcp_server()
     fn = _get_tool(mcp, "get_body_weight")
-    rows = fn(start_date="2026-05-01", end_date="2026-05-01")
+    rows = fn(start_date="2026-05-01", end_date="2026-05-01")["items"]
     assert len(rows) == 1
     assert rows[0]["weight_kg"] == 78.2
 
