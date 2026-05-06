@@ -99,13 +99,20 @@ Reaches FoodLog only via the Renpho → **Fitbit cloud** → Google account chai
 | Device records | API type | API granularity | Pulled? | Stored at | Table |
 |---|---|---|---|---|---|
 | Weight | `weight` | Per-sample (each weigh-in) | Yes (via Fitbit relay) | Per-sample | `body_composition` (`weight_kg`) |
-| Body fat % | `body-fat` | Per-sample | Code wired, no data | Per-sample (always null in practice) | `body_composition` (`body_fat_pct`) |
+| Body fat % | `body-fat` | Per-sample | Yes, on barefoot weigh-ins | Per-sample (separate row from weight, same `measured_at`) | `body_composition` (`body_fat_pct`) |
 | Height (one-time) | `height` | Per-sample | No | — | — |
 
-**Why body fat shows up in the schema but never has data:** Renpho's own FAQ states *"When using third-party apps between platforms and the Renpho app, it only brings over Weight, Change and BMI. Other metrics like body fat% are not transferred over."* The Renpho → Fitbit hop drops body fat. Confirmed empirically 2026-05-02 — fresh weigh-in produced 1 weight point, 0 body-fat points in Google.
+**Body fat propagation is conditional on a barefoot weigh-in.** Empirical history:
+- 2026-05-02 (socks on): 1 weight point, 0 body-fat points in Google.
+- 2026-05-03 (socks on): 1 weight point, 0 body-fat points.
+- 2026-05-04 (barefoot): 1 weight point + 1 body-fat point, both at the same `measured_at`.
+
+The earlier conclusion that "the Renpho → Fitbit hop drops body fat" was wrong — what was actually happening is that the scale couldn't measure body composition through socks, so no body-fat sample was created upstream. When the user weighs in barefoot, body fat reaches Google Health and lands in the `body_composition` table as a *separate row* keyed on a different `external_id` but the same `physicalTime`. Renpho's own FAQ caveat about third-party apps still applies to less common metrics (BMR, visceral fat, etc.) — Fitbit only relays weight + body fat.
+
+**Two-row gotcha:** weight and body-fat arrive as distinct rows. A naive `ORDER BY measured_at DESC LIMIT 1` against `body_composition` can return the body-fat row (with `weight_kg=NULL`) and silently hide downstream weight UI. Filter on `weight_kg IS NOT NULL` before picking the latest, then look up the matching body-fat row at the same `measured_at`. See `_build_movement_context` in `foodlog/api/routers/dashboard.py` and the regression tests in `tests/test_dashboard.py` (search `body_fat_row_ties_measured_at`).
 
 **Recorded by Renpho but not reachable via Google Health at all:**
-Body fat %, BMI, lean body mass, skeletal muscle mass, bone mass, body water %, visceral fat, BMR, metabolic age, protein %, subcutaneous fat. These appear in Health Connect on the phone but are not exposed via the cloud REST API. The realistic path to capture any of these is a direct **Renpho cloud-API client** (`renpho-api` on PyPI, reverse-engineered, hits `renpho.qnclouds.com`) running alongside the Google Health client. See "Notes for future work" below.
+BMI, lean body mass, skeletal muscle mass, bone mass, body water %, visceral fat, BMR, metabolic age, protein %, subcutaneous fat. These appear in Health Connect on the phone but are not exposed via the cloud REST API. The realistic path to capture any of these is a direct **Renpho cloud-API client** (`renpho-api` on PyPI, reverse-engineered, hits `renpho.qnclouds.com`) running alongside the Google Health client. See "Notes for future work" below.
 
 ## Granularity gap (available vs. stored)
 
