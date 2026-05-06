@@ -181,21 +181,37 @@ def _build_movement_context(db: Session, start_date, end_date) -> dict:
             "resting_hr": resting.bpm if resting else None,
         }
 
+    # `body_composition` holds Google Health weight points and body-fat points
+    # as separate rows (different external_id, same measured_at on a barefoot
+    # Renpho weigh-in). Filter to weight rows so a tied or newer body-fat row
+    # can't outrank the actual weight reading and silently hide the card.
+    # Then look up the body-fat row at the same instant to keep the % on the
+    # card. See foodlog-bbl.
     latest_body = (db.query(BodyComposition)
+                     .filter(BodyComposition.weight_kg.isnot(None))
                      .order_by(BodyComposition.measured_at.desc()).first())
     weight_view = None
-    if latest_body and latest_body.weight_kg:
+    if latest_body is not None:
         week_ago = (db.query(BodyComposition)
-                      .filter(BodyComposition.measured_at <= latest_body.measured_at
+                      .filter(BodyComposition.weight_kg.isnot(None),
+                              BodyComposition.measured_at <= latest_body.measured_at
                                                             - datetime.timedelta(days=7))
                       .order_by(BodyComposition.measured_at.desc()).first())
         delta = None
-        if week_ago and week_ago.weight_kg:
+        if week_ago is not None:
             delta = latest_body.weight_kg - week_ago.weight_kg
+        body_fat_pct = latest_body.body_fat_pct
+        if body_fat_pct is None:
+            sibling_fat = (db.query(BodyComposition)
+                             .filter(BodyComposition.measured_at == latest_body.measured_at,
+                                     BodyComposition.body_fat_pct.isnot(None))
+                             .first())
+            if sibling_fat is not None:
+                body_fat_pct = sibling_fat.body_fat_pct
         weight_view = {
             "weight_kg": latest_body.weight_kg,
             "delta_kg": delta,
-            "body_fat_pct": latest_body.body_fat_pct,
+            "body_fat_pct": body_fat_pct,
         }
 
     activity = (db.query(DailyActivity)
