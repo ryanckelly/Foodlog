@@ -269,3 +269,93 @@ def test_background_sync_records_token_invalid_as_reconnect_needed(
 
     assert dm._sync_state.reconnect_needed is True
     assert dm._sync_state.last_ok is False
+
+
+def test_feed_renders_weight_card_when_body_fat_row_ties_measured_at(
+    health_raw_client, db_session
+):
+    """Barefoot Renpho weigh-in produces two rows in body_composition with the
+    same measured_at: one weight point (weight_kg set, body_fat_pct null) and
+    one body-fat point (weight_kg null, body_fat_pct set). The dashboard's
+    'latest body' query must return the weight row, not the body-fat row, or
+    the Weight card silently disappears.
+
+    Regression for foodlog-bbl. Live evidence captured 2026-05-05: 2026-05-04
+    10:56:52 weigh-in produced both rows; the dashboard hid the weight card.
+    """
+    from foodlog.db.models import BodyComposition
+
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+
+    measured = datetime.datetime(2026, 5, 4, 10, 56, 52)
+
+    # Insertion order matters — insert body-fat row FIRST so the buggy
+    # `ORDER BY measured_at DESC LIMIT 1` (no tiebreaker) returns it.
+    db_session.add(BodyComposition(
+        external_id="users/x/dataTypes/body-fat/dataPoints/1",
+        measured_at=measured,
+        source="FITBIT_WEB_API",
+        weight_kg=None,
+        body_fat_pct=20.6,
+    ))
+    db_session.add(BodyComposition(
+        external_id="users/x/dataTypes/weight/dataPoints/1",
+        measured_at=measured,
+        source="FITBIT_WEB_API",
+        weight_kg=82.85,
+        body_fat_pct=None,
+    ))
+    db_session.commit()
+    _seed_recent_sync()
+
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    # Card title and the weight value (in lbs, what the template renders).
+    assert ">Weight</div>" in resp.text
+    assert "182.7" in resp.text  # 82.85 kg → 182.69 lbs, formatted "%.1f"
+    # Body fat from the sibling row should still appear on the same card.
+    assert "body fat 20.6%" in resp.text
+
+
+def test_feed_falls_back_to_older_weight_when_latest_row_is_body_fat_only(
+    health_raw_client, db_session
+):
+    """Strong regression for foodlog-bbl: when the most-recent body_composition
+    row by measured_at is body-fat-only (weight_kg=None), the dashboard must
+    skip it and fall back to the most recent weight-bearing row. The buggy
+    'ORDER BY measured_at DESC LIMIT 1' (no weight_kg filter) returns the
+    body-fat row, weight_kg is None, and the Weight card disappears.
+
+    Unlike the tied-measured_at test above, this case does not depend on
+    SQLite tie-break behavior — body-fat is unambiguously the latest row.
+    """
+    from foodlog.db.models import BodyComposition
+
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+
+    db_session.add(BodyComposition(
+        external_id="bf-only-1",
+        measured_at=datetime.datetime(2026, 5, 4, 10, 56, 52),
+        source="FITBIT_WEB_API",
+        weight_kg=None,
+        body_fat_pct=20.6,
+    ))
+    db_session.add(BodyComposition(
+        external_id="w-only-1",
+        measured_at=datetime.datetime(2026, 5, 3, 19, 16, 35),
+        source="FITBIT_WEB_API",
+        weight_kg=84.75,
+        body_fat_pct=None,
+    ))
+    db_session.commit()
+    _seed_recent_sync()
+
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    assert ">Weight</div>" in resp.text
+    # 84.75 kg → 186.84 lbs, formatted "%.1f" → "186.8".
+    assert "186.8" in resp.text
