@@ -1,0 +1,140 @@
+"""SQLite-to-pandas daily-rollup pipeline for body_sim.
+
+Single entry point: `build_daily_rollup(session, start, end)`. Internally
+composed of per-source helpers (rollup_food, rollup_activity, etc.) so each is
+independently testable.
+
+All helpers return a DataFrame indexed by date with one row per day in
+[start, end] inclusive — missing days are present with NaN/zero per the
+missingness conventions in the spec.
+"""
+
+import datetime
+
+import numpy as np
+import pandas as pd
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from foodlog.db.models import FoodEntry
+
+
+def _date_index(start: datetime.date, end: datetime.date) -> pd.DatetimeIndex:
+    """Daily index covering [start, end] inclusive."""
+    return pd.date_range(start=start, end=end, freq="D", name="date")
+
+
+def rollup_food(
+    session: Session, start: datetime.date, end: datetime.date
+) -> pd.DataFrame:
+    """Aggregate `food_entries` to one row per day with intake totals + coverage.
+
+    Columns returned:
+        intake_kcal       — total calories (NaN if no entries that day)
+        protein_g         — total protein (NaN if no entries)
+        carb_g            — total carbohydrate (NaN if no entries)
+        fat_g             — total fat (NaN if no entries)
+        sodium_mg         — total sodium (NaN if no entries)
+        meal_types_logged — frozenset of meal_type strings present
+        intake_coverage   — fraction of {breakfast, lunch, dinner} logged (0.0–1.0)
+        intake_logged     — True if coverage >= 0.67
+
+    Snacks are included in calorie/macro totals but are excluded from the
+    coverage calculation (coverage counts only the three main meal types).
+
+    If the same meal_type is logged twice on the same day both rows contribute
+    to calorie/macro sums and the meal_type is counted once for coverage — the
+    GROUP BY collapses duplicate meal_types correctly.
+
+    Note: uses func.date() rather than cast(Date) because SQLite's DATE cast
+    returns a numeric tuple in SQLAlchemy's in-memory driver, making it
+    unusable for string comparison. func.date() returns an ISO-8601 string
+    ('YYYY-MM-DD') on both SQLite and PostgreSQL and is safe for >= / <=
+    comparisons against isoformat() strings.
+    """
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+
+    rows = (
+        session.query(
+            func.date(FoodEntry.logged_at).label("d"),
+            FoodEntry.meal_type,
+            func.sum(FoodEntry.calories).label("kcal"),
+            func.sum(FoodEntry.protein_g).label("p"),
+            func.sum(FoodEntry.carbs_g).label("c"),
+            func.sum(FoodEntry.fat_g).label("f"),
+            func.sum(FoodEntry.sodium_mg).label("na"),
+            func.count().label("n"),
+        )
+        .filter(
+            func.date(FoodEntry.logged_at) >= start_iso,
+            func.date(FoodEntry.logged_at) <= end_iso,
+        )
+        .group_by("d", FoodEntry.meal_type)
+        .all()
+    )
+
+    # Build per-day aggregates
+    per_day: dict[datetime.date, dict] = {}
+    for r in rows:
+        d = r.d if isinstance(r.d, datetime.date) else datetime.date.fromisoformat(str(r.d))
+        cell = per_day.setdefault(
+            d,
+            {
+                "intake_kcal": 0.0,
+                "protein_g": 0.0,
+                "carb_g": 0.0,
+                "fat_g": 0.0,
+                "sodium_mg": 0.0,
+                "meal_types_logged": set(),
+                "n_entries": 0,
+            },
+        )
+        cell["intake_kcal"] += r.kcal or 0
+        cell["protein_g"] += r.p or 0
+        cell["carb_g"] += r.c or 0
+        cell["fat_g"] += r.f or 0
+        cell["sodium_mg"] += r.na or 0
+        cell["meal_types_logged"].add(r.meal_type)
+        cell["n_entries"] += r.n
+
+    # Materialize one row per day in the requested range
+    idx = _date_index(start, end)
+    records = []
+    for ts in idx:
+        d = ts.date()
+        if d in per_day:
+            cell = per_day[d]
+            main_meals = {"breakfast", "lunch", "dinner"} & cell["meal_types_logged"]
+            coverage = len(main_meals) / 3.0
+            records.append(
+                {
+                    "intake_kcal": cell["intake_kcal"],
+                    "protein_g": cell["protein_g"],
+                    "carb_g": cell["carb_g"],
+                    "fat_g": cell["fat_g"],
+                    "sodium_mg": cell["sodium_mg"],
+                    "meal_types_logged": frozenset(cell["meal_types_logged"]),
+                    "intake_coverage": coverage,
+                    "intake_logged": bool(coverage >= 0.67),
+                }
+            )
+        else:
+            records.append(
+                {
+                    "intake_kcal": np.nan,
+                    "protein_g": np.nan,
+                    "carb_g": np.nan,
+                    "fat_g": np.nan,
+                    "sodium_mg": np.nan,
+                    "meal_types_logged": frozenset(),
+                    "intake_coverage": 0.0,
+                    "intake_logged": False,
+                }
+            )
+    df = pd.DataFrame(records, index=idx)
+    # Preserve Python bool identity so `row["intake_logged"] is True/False`
+    # works in tests. pandas infers bool dtype → np.bool_, which fails `is`
+    # checks. Cast to object dtype to keep the native Python bool objects.
+    df["intake_logged"] = df["intake_logged"].astype(object)
+    return df
