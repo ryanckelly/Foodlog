@@ -8,6 +8,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailyRespiratoryOxygen,
     DailySleepTemperature,
     RestingHeartRate,
     SleepSession,
@@ -295,6 +296,35 @@ def test_get_daily_sleep_temperature_returns_in_range(db_session):
     items = result["items"]
     assert [r["date"] for r in items] == ["2026-05-17", "2026-05-18"]
     assert items[1]["relative_stddev_30d_c"] == pytest.approx(0.857)
+
+
+def test_get_daily_respiratory_oxygen_returns_in_range(db_session):
+    """Surfaces bundled SpO2 + respiratory-rate rows, including ones that
+    have only one of the two halves populated."""
+    db_session.add_all([
+        DailyRespiratoryOxygen(
+            date=datetime.date(2026, 5, 18),
+            breaths_per_min=10.8,
+            spo2_avg_pct=95.9, spo2_low_pct=93.7, spo2_high_pct=98.0,
+            spo2_std_pct=0.9, source="Pixel Watch 3", external_id="r1",
+        ),
+        DailyRespiratoryOxygen(
+            date=datetime.date(2026, 5, 17),
+            breaths_per_min=None,    # missing resp half
+            spo2_avg_pct=95.4, source="Pixel Watch 3", external_id="r2",
+        ),
+    ])
+    db_session.commit()
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_daily_respiratory_oxygen")
+    result = fn(start_date="2026-05-17", end_date="2026-05-18")
+    items = result["items"]
+    assert [r["date"] for r in items] == ["2026-05-17", "2026-05-18"]
+    full = items[1]
+    assert full["breaths_per_min"] == pytest.approx(10.8)
+    assert full["spo2_avg_pct"] == pytest.approx(95.9)
+    assert items[0]["breaths_per_min"] is None
+    assert items[0]["spo2_low_pct"] is None
 
 
 def test_get_resting_heart_rate_returns_in_range(db_session):

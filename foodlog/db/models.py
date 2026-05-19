@@ -213,6 +213,27 @@ class DailyHrv(Base):
     )
 
 
+class DailyRespiratoryOxygen(Base):
+    """One row per civil date — daily SpO2 (4 fields) + daily respiratory rate
+    (1 field) merged from two v4 endpoints. Bundled because both are cheap,
+    measured on the same nights, and the body-sim consumes them together as
+    a "second-opinion" check against the skin-temp illness signal.
+    """
+    __tablename__ = "daily_respiratory_oxygen"
+
+    date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    breaths_per_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_avg_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_low_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_high_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_std_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
 class DailySleepTemperature(Base):
     """One row per civil date — nightly skin-temperature deltas from Pixel Watch.
 

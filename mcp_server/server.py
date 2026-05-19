@@ -20,6 +20,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailyRespiratoryOxygen,
     DailySleepTemperature,
     RestingHeartRate,
     SleepSession,
@@ -48,6 +49,7 @@ TOOL_REQUIRED_SCOPES = {
     "get_body_weight": ["foodlog.read"],
     "get_daily_hrv": ["foodlog.read"],
     "get_daily_sleep_temperature": ["foodlog.read"],
+    "get_daily_respiratory_oxygen": ["foodlog.read"],
 }
 
 MAX_RANGE_DAYS = 90
@@ -151,7 +153,8 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             "breakdown when available), get_resting_heart_rate (daily resting "
             "HR), get_daily_hrv (overnight HRV stats), get_daily_sleep_temperature "
             "(skin-temp deviations from personal baseline — useful for flagging "
-            "illness/alcohol days), get_workouts (workouts with optional HR "
+            "illness/alcohol days), get_daily_respiratory_oxygen (overnight "
+            "breathing rate + SpO2), get_workouts (workouts with optional HR "
             "samples), and get_body_weight (body weight readings in kg)."
         ),
         streamable_http_path="/mcp",
@@ -499,6 +502,53 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                         "nightly_temp_c": r.nightly_temp_c,
                         "baseline_temp_c": r.baseline_temp_c,
                         "relative_stddev_30d_c": r.relative_stddev_30d_c,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
+
+    @mcp.tool()
+    def get_daily_respiratory_oxygen(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> dict:
+        """Get overnight respiratory rate + SpO2 stats for a date range.
+
+        Per-night Pixel Watch readings merged from two endpoints:
+        - breaths_per_min: daily average respiratory rate (BPM)
+        - spo2_avg_pct / spo2_low_pct / spo2_high_pct: SpO2 distribution
+          across the night
+        - spo2_std_pct: SpO2 standard deviation across the night
+
+        Either subset may be None on a given day if only one of the two
+        Google endpoints had data that night.
+
+        Defaults to the last 7 days.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=7)
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(DailyRespiratoryOxygen)
+                .filter(DailyRespiratoryOxygen.date >= start,
+                        DailyRespiratoryOxygen.date <= end)
+                .order_by(DailyRespiratoryOxygen.date.asc())
+                .all()
+            )
+            return {
+                "items": [
+                    {
+                        "date": r.date.isoformat(),
+                        "breaths_per_min": r.breaths_per_min,
+                        "spo2_avg_pct": r.spo2_avg_pct,
+                        "spo2_low_pct": r.spo2_low_pct,
+                        "spo2_high_pct": r.spo2_high_pct,
+                        "spo2_std_pct": r.spo2_std_pct,
                         "source": r.source,
                     }
                     for r in rows

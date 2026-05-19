@@ -1,0 +1,24 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/daily-oxygen-saturation/dataPoints/2026-05-18",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyOxygenSaturation": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "averagePercentage": 95.9,
+        "lowerBoundPercentage": 93.7,
+        "upperBoundPercentage": 98.0,
+        "standardDeviationPercentage": 0.9
+      }
+    },
+    {
+      "name": "users/me/dataTypes/daily-oxygen-saturation/dataPoints/2026-05-17",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyOxygenSaturation": {
+        "date": {"year": 2026, "month": 5, "day": 17},
+        "averagePercentage": 95.4
+      }
+    }
+  ],
+  "nextPageToken": ""
+}

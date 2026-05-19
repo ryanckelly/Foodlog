@@ -159,6 +159,42 @@ async def test_list_daily_sleep_temperature(http):
         assert normal.relative_stddev_30d_c == pytest.approx(0.087)
 
 
+async def test_list_daily_spo2(http):
+    """daily-oxygen-saturation parser: extracts avg/low/high/std, with
+    sparse rows (only avg) handled correctly."""
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.get(url__regex=r".*/daily-oxygen-saturation/dataPoints.*").mock(
+            return_value=httpx.Response(200, json=_load("daily_spo2.json"))
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_daily_spo2(
+            since=datetime.datetime(2026, 5, 1),
+        )]
+        assert len(rows) == 2
+        full = next(r for r in rows if r.date == datetime.date(2026, 5, 18))
+        assert full.avg_pct == pytest.approx(95.9)
+        assert full.low_pct == pytest.approx(93.7)
+        assert full.high_pct == pytest.approx(98.0)
+        assert full.std_pct == pytest.approx(0.9)
+        sparse = next(r for r in rows if r.date == datetime.date(2026, 5, 17))
+        assert sparse.avg_pct == pytest.approx(95.4)
+        assert sparse.low_pct is None and sparse.high_pct is None and sparse.std_pct is None
+
+
+async def test_list_daily_respiratory_rate(http):
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.get(url__regex=r".*/daily-respiratory-rate/dataPoints.*").mock(
+            return_value=httpx.Response(200, json=_load("daily_respiratory_rate.json"))
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_daily_respiratory_rate(
+            since=datetime.datetime(2026, 5, 1),
+        )]
+        assert len(rows) == 2
+        d18 = next(r for r in rows if r.date == datetime.date(2026, 5, 18))
+        assert d18.breaths_per_min == pytest.approx(10.8)
+
+
 async def test_list_sleep_sessions(http):
     with respx.mock(base_url="https://health.googleapis.com") as mock:
         mock.get(url__regex=r".*/sleep/dataPoints.*").mock(

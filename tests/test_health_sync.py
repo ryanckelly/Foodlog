@@ -7,7 +7,9 @@ from foodlog.clients.google_health import (
     BodyCompositionRow,
     DailyActivityRow,
     DailyHrvRow,
+    DailyRespiratoryRateRow,
     DailySleepTemperatureRow,
+    DailySpo2Row,
     RestingHeartRateRow,
     SleepSessionRow,
     WorkoutRow,
@@ -17,6 +19,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailyRespiratoryOxygen,
     DailySleepTemperature,
     RestingHeartRate,
     SleepSession,
@@ -55,6 +58,8 @@ def client():
     c.list_resting_heart_rate = lambda *a, **kw: _collect([])
     c.list_daily_hrv = lambda *a, **kw: _collect([])
     c.list_daily_sleep_temperature = lambda *a, **kw: _collect([])
+    c.list_daily_spo2 = lambda *a, **kw: _collect([])
+    c.list_daily_respiratory_rate = lambda *a, **kw: _collect([])
     c.list_sleep_sessions = lambda *a, **kw: _collect([])
     c.list_workouts = lambda *a, **kw: _collect([
         WorkoutRow(
@@ -328,6 +333,85 @@ async def test_sync_daily_sleep_temperature_persists_metrics(db_session):
 
 
 @pytest.mark.asyncio
+async def test_sync_daily_respiratory_oxygen_merges_both_endpoints(db_session):
+    """Two endpoints, one row per date. Dates present in both endpoints get
+    a single merged row; dates with only one endpoint get a row with the
+    missing fields left NULL."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    spo2_rows = [
+        DailySpo2Row(external_id="s1", date=datetime.date(2026, 5, 18),
+            avg_pct=95.9, low_pct=93.7, high_pct=98.0, std_pct=0.9, source="watch"),
+        DailySpo2Row(external_id="s2", date=datetime.date(2026, 5, 17),
+            avg_pct=95.4, low_pct=None, high_pct=None, std_pct=None, source="watch"),
+    ]
+    resp_rows = [
+        DailyRespiratoryRateRow(external_id="r1", date=datetime.date(2026, 5, 18),
+            breaths_per_min=10.8, source="watch"),
+        # Note: no resp row for 2026-05-17 (one-endpoint-only case)
+        # And a resp-only row for a date with no SpO2:
+        DailyRespiratoryRateRow(external_id="r2", date=datetime.date(2026, 5, 16),
+            breaths_per_min=10.4, source="watch"),
+    ]
+
+    class StubClient:
+        async def list_daily_spo2(self, since, until=None):
+            for r in spo2_rows: yield r
+        async def list_daily_respiratory_rate(self, since, until=None):
+            for r in resp_rows: yield r
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_daily_respiratory_oxygen()
+    assert n == 3  # three distinct dates
+
+    rows = {r.date: r for r in db_session.query(DailyRespiratoryOxygen).all()}
+
+    # 1. Date in both: every field populated
+    both = rows[datetime.date(2026, 5, 18)]
+    assert both.breaths_per_min == pytest.approx(10.8)
+    assert both.spo2_avg_pct == pytest.approx(95.9)
+    assert both.spo2_low_pct == pytest.approx(93.7)
+    assert both.spo2_high_pct == pytest.approx(98.0)
+    assert both.spo2_std_pct == pytest.approx(0.9)
+    assert both.external_id == "daily-resp-ox|2026-05-18"
+
+    # 2. Date with only SpO2 — resp field is null
+    spo2_only = rows[datetime.date(2026, 5, 17)]
+    assert spo2_only.spo2_avg_pct == pytest.approx(95.4)
+    assert spo2_only.breaths_per_min is None
+
+    # 3. Date with only resp rate — SpO2 fields all null
+    resp_only = rows[datetime.date(2026, 5, 16)]
+    assert resp_only.breaths_per_min == pytest.approx(10.4)
+    assert resp_only.spo2_avg_pct is None
+    assert resp_only.spo2_low_pct is None
+
+
+@pytest.mark.asyncio
+async def test_sync_daily_respiratory_oxygen_is_idempotent(db_session):
+    """Re-running the sync against the same data must not create duplicate
+    rows — external_id is derived from date so the date PK conflict path
+    triggers correctly on the second run."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    spo2 = [DailySpo2Row(external_id="x", date=datetime.date(2026, 5, 18),
+        avg_pct=95.9, low_pct=None, high_pct=None, std_pct=None, source="watch")]
+    resp = [DailyRespiratoryRateRow(external_id="x", date=datetime.date(2026, 5, 18),
+        breaths_per_min=10.8, source="watch")]
+
+    class StubClient:
+        async def list_daily_spo2(self, since, until=None):
+            for r in spo2: yield r
+        async def list_daily_respiratory_rate(self, since, until=None):
+            for r in resp: yield r
+
+    sync = HealthSyncService(db_session, StubClient())
+    await sync._sync_daily_respiratory_oxygen()
+    await sync._sync_daily_respiratory_oxygen()
+    assert db_session.query(DailyRespiratoryOxygen).count() == 1
+
+
+@pytest.mark.asyncio
 async def test_sync_sleep_persists_stage_breakdown(db_session):
     """STAGES session writes per-stage minute totals + metadata into the
     extended sleep_sessions columns; CLASSIC session leaves stage fields
@@ -467,6 +551,10 @@ async def test_sync_all_includes_interval_metrics(db_session):
         async def list_daily_hrv(self, since, until=None):
             return; yield
         async def list_daily_sleep_temperature(self, since, until=None):
+            return; yield
+        async def list_daily_spo2(self, since, until=None):
+            return; yield
+        async def list_daily_respiratory_rate(self, since, until=None):
             return; yield
         async def list_sleep_sessions(self, since, until=None):
             return; yield

@@ -44,6 +44,8 @@ DATA_TYPES = {
     "workout": "exercise",
     "daily_hrv": "daily-heart-rate-variability",
     "daily_sleep_temperature": "daily-sleep-temperature-derivations",
+    "daily_oxygen_saturation": "daily-oxygen-saturation",
+    "daily_respiratory_rate": "daily-respiratory-rate",
 }
 
 # Per-endpoint filter grammar for the `list` action. Each entry:
@@ -63,6 +65,8 @@ FILTER_FIELDS: dict[str, tuple[str, str]] = {
     "daily-resting-heart-rate": ("daily_resting_heart_rate.date",                 "date"),
     "daily-heart-rate-variability": ("daily_heart_rate_variability.date",         "date"),
     "daily-sleep-temperature-derivations": ("daily_sleep_temperature_derivations.date", "date"),
+    "daily-oxygen-saturation":  ("daily_oxygen_saturation.date",                  "date"),
+    "daily-respiratory-rate":   ("daily_respiratory_rate.date",                   "date"),
     "heart-rate":               ("heart_rate.sample_time.physical_time",          "rfc3339"),
     # Sleep's only valid filter member is civil_end_time (Google rejects
     # civil_start_time with INVALID_DATA_POINT_FILTER_DATA_TYPE_MEMBER). The
@@ -133,6 +137,28 @@ class DailyHrvRow:
     deep_sleep_rmssd_ms: float | None
     non_rem_hr_bpm: int | None
     entropy: float | None
+    source: str
+
+
+@dataclass(slots=True)
+class DailySpo2Row:
+    """One row per civil date from daily-oxygen-saturation. All metric fields
+    nullable so a night with only an average — no bounds — is representable."""
+    external_id: str
+    date: datetime.date
+    avg_pct: float | None
+    low_pct: float | None
+    high_pct: float | None
+    std_pct: float | None
+    source: str
+
+
+@dataclass(slots=True)
+class DailyRespiratoryRateRow:
+    """One row per civil date from daily-respiratory-rate."""
+    external_id: str
+    date: datetime.date
+    breaths_per_min: float | None
     source: str
 
 
@@ -621,6 +647,71 @@ class GoogleHealthClient:
                 nightly_temp_c=float(nightly) if nightly is not None else None,
                 baseline_temp_c=float(baseline) if baseline is not None else None,
                 relative_stddev_30d_c=float(relstd) if relstd is not None else None,
+                source=_source_from(pt.get("dataSource")),
+            )
+
+    async def list_daily_spo2(
+        self, since: datetime.datetime, until: datetime.datetime | None = None,
+    ) -> AsyncIterator[DailySpo2Row]:
+        # v4 shape: pt["dailyOxygenSaturation"] = {
+        #   "date": {...},
+        #   "averagePercentage": 95.9,
+        #   "lowerBoundPercentage": 93.7,
+        #   "upperBoundPercentage": 98.0,
+        #   "standardDeviationPercentage": 0.9
+        # }
+        async for pt in self._paginate(DATA_TYPES["daily_oxygen_saturation"], since, until):
+            inner = pt.get("dailyOxygenSaturation") or {}
+            date_obj = inner.get("date") or {}
+            if not date_obj:
+                logger.warning("google-health daily-spo2 point missing date: %r", pt)
+                continue
+            try:
+                d = _parse_civil_date(date_obj)
+            except (KeyError, ValueError, TypeError):
+                logger.warning("google-health daily-spo2 date malformed: %r", pt)
+                continue
+            name = pt.get("name") or _synth_id(
+                "daily-spo2", _source_from(pt.get("dataSource")), d.isoformat(),
+            )
+            def _f(v):
+                return float(v) if v is not None else None
+            yield DailySpo2Row(
+                external_id=name,
+                date=d,
+                avg_pct=_f(inner.get("averagePercentage")),
+                low_pct=_f(inner.get("lowerBoundPercentage")),
+                high_pct=_f(inner.get("upperBoundPercentage")),
+                std_pct=_f(inner.get("standardDeviationPercentage")),
+                source=_source_from(pt.get("dataSource")),
+            )
+
+    async def list_daily_respiratory_rate(
+        self, since: datetime.datetime, until: datetime.datetime | None = None,
+    ) -> AsyncIterator[DailyRespiratoryRateRow]:
+        # v4 shape: pt["dailyRespiratoryRate"] = {
+        #   "date": {...},
+        #   "breathsPerMinute": 10.8
+        # }
+        async for pt in self._paginate(DATA_TYPES["daily_respiratory_rate"], since, until):
+            inner = pt.get("dailyRespiratoryRate") or {}
+            date_obj = inner.get("date") or {}
+            if not date_obj:
+                logger.warning("google-health daily-resp-rate point missing date: %r", pt)
+                continue
+            try:
+                d = _parse_civil_date(date_obj)
+            except (KeyError, ValueError, TypeError):
+                logger.warning("google-health daily-resp-rate date malformed: %r", pt)
+                continue
+            bpm = inner.get("breathsPerMinute")
+            name = pt.get("name") or _synth_id(
+                "daily-resp-rate", _source_from(pt.get("dataSource")), d.isoformat(),
+            )
+            yield DailyRespiratoryRateRow(
+                external_id=name,
+                date=d,
+                breaths_per_min=float(bpm) if bpm is not None else None,
                 source=_source_from(pt.get("dataSource")),
             )
 

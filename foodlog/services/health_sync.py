@@ -20,6 +20,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailyRespiratoryOxygen,
     DailySleepTemperature,
     IntervalActivity,
     IntervalAzm,
@@ -104,6 +105,7 @@ class HealthSyncService:
         await _run("resting_heart_rate", self._sync_resting_hr)
         await _run("daily_hrv", self._sync_daily_hrv)
         await _run("daily_sleep_temperature", self._sync_daily_sleep_temperature)
+        await _run("daily_respiratory_oxygen", self._sync_daily_respiratory_oxygen)
         await _run("sleep_sessions", self._sync_sleep, brittle=True)
         await _run("interval_heart_rate", self._sync_interval_heart_rate)
         await _run("interval_activity", self._sync_interval_activity)
@@ -221,6 +223,62 @@ class HealthSyncService:
             DailySleepTemperature, self._client.list_daily_sleep_temperature,
             ("nightly_temp_c", "baseline_temp_c", "relative_stddev_30d_c"),
         )
+
+    async def _sync_daily_respiratory_oxygen(self) -> int:
+        """Two endpoints (daily-oxygen-saturation + daily-respiratory-rate),
+        one bundled table keyed on civil date.
+
+        Tolerates one endpoint missing on a given day — the missing column
+        stays NULL on that date's row. external_id is synthesized from the
+        date so re-runs hit the same row whether or not both endpoints had
+        data the first time.
+        """
+        cursor_date = self._db.execute(
+            select(func.max(DailyRespiratoryOxygen.date))
+        ).scalar_one_or_none()
+        if cursor_date is None:
+            since = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(days=DEFAULT_BACKFILL_DAYS)
+        else:
+            since = datetime.datetime.combine(cursor_date, datetime.time.min)
+
+        spo2_rows = [r async for r in self._client.list_daily_spo2(since=since)]
+        resp_rows = [r async for r in self._client.list_daily_respiratory_rate(since=since)]
+
+        by_date: dict[datetime.date, dict] = {}
+        for r in spo2_rows:
+            by_date[r.date] = dict(
+                date=r.date,
+                spo2_avg_pct=r.avg_pct,
+                spo2_low_pct=r.low_pct,
+                spo2_high_pct=r.high_pct,
+                spo2_std_pct=r.std_pct,
+                breaths_per_min=None,
+                source=r.source,
+                external_id=f"daily-resp-ox|{r.date.isoformat()}",
+            )
+        for r in resp_rows:
+            entry = by_date.get(r.date)
+            if entry is None:
+                by_date[r.date] = dict(
+                    date=r.date,
+                    spo2_avg_pct=None, spo2_low_pct=None,
+                    spo2_high_pct=None, spo2_std_pct=None,
+                    breaths_per_min=r.breaths_per_min,
+                    source=r.source,
+                    external_id=f"daily-resp-ox|{r.date.isoformat()}",
+                )
+            else:
+                entry["breaths_per_min"] = r.breaths_per_min
+
+        for values in by_date.values():
+            stmt = sqlite_insert(DailyRespiratoryOxygen).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["date"],
+                set_={k: v for k, v in values.items() if k != "date"},
+            )
+            self._db.execute(stmt)
+        self._db.commit()
+        return len(by_date)
 
     async def _sync_daily_keyed(self, model, list_fn, metric_fields: tuple[str, ...]) -> int:
         """Shared cursor-walked upsert for date-keyed daily aggregate tables.

@@ -1,0 +1,21 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/daily-respiratory-rate/dataPoints/2026-05-18",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyRespiratoryRate": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "breathsPerMinute": 10.8
+      }
+    },
+    {
+      "name": "users/me/dataTypes/daily-respiratory-rate/dataPoints/2026-05-16",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyRespiratoryRate": {
+        "date": {"year": 2026, "month": 5, "day": 16},
+        "breathsPerMinute": 10.4
+      }
+    }
+  ],
+  "nextPageToken": ""
+}
