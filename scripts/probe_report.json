@@ -1,0 +1,936 @@
+{
+  "generated_at": "2026-05-19T02:40:33.940053+00:00",
+  "lookback_days": 14,
+  "probes": [
+    {
+      "label": "hrv_interval",
+      "endpoint": "heart-rate-variability",
+      "action": "list",
+      "filter": "heart_rate_variability.sample_time.physical_time >= \"2026-05-05T02:40:28Z\"",
+      "status": 200,
+      "point_count": 50,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "heartRateVariability": {
+            "sampleTime": {
+              "physicalTime": "2026-05-18T09:35:00Z",
+              "utcOffset": "-10800s",
+              "civilTime": {
+                "date": {
+                  "year": 2026,
+                  "month": 5,
+                  "day": 18
+                },
+                "time": {
+                  "hours": 6,
+                  "minutes": 35
+                }
+              }
+            },
+            "rootMeanSquareOfSuccessiveDifferencesMilliseconds": 64.7
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "heartRateVariability": {
+            "sampleTime": {
+              "physicalTime": "2026-05-18T09:30:00Z",
+              "utcOffset": "-10800s",
+              "civilTime": {
+                "date": {
+                  "year": 2026,
+                  "month": 5,
+                  "day": 18
+                },
+                "time": {
+                  "hours": 6,
+                  "minutes": 30
+                }
+              }
+            },
+            "rootMeanSquareOfSuccessiveDifferencesMilliseconds": 51.9
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-18"
+      ],
+      "coverage_days": 1
+    },
+    {
+      "label": "hrv_daily",
+      "endpoint": "daily-heart-rate-variability",
+      "action": "list",
+      "filter": "daily_heart_rate_variability.date >= \"2026-05-05\"",
+      "status": 200,
+      "point_count": 12,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyHeartRateVariability": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "averageHeartRateVariabilityMilliseconds": 64.7,
+            "nonRemHeartRateBeatsPerMinute": "54",
+            "entropy": 3.142,
+            "deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds": 56.25
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyHeartRateVariability": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 16
+            },
+            "averageHeartRateVariabilityMilliseconds": 52.15,
+            "nonRemHeartRateBeatsPerMinute": "54",
+            "entropy": 3.175,
+            "deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds": 47
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-18"
+      ],
+      "coverage_days": 12
+    },
+    {
+      "label": "hrv_rmssd_daily",
+      "endpoint": "daily-heart-rate-variability-rmssd",
+      "action": "list",
+      "filter": "daily_heart_rate_variability_rmssd.date >= \"2026-05-05\"",
+      "status": 400,
+      "error_body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid data type ID referenced in the parent data type collection: daily-heart-rate-variability-rmssd\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"INVALID_PARENT_DATA_TYPE_COLLECTION\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"dataType\": \"daily-heart-rate-variability-rmssd\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"parent\",\n            \"description\": \"The data type ID 'daily-heart-rate-variability-rmssd' is not supported.\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+    },
+    {
+      "label": "spo2_interval",
+      "endpoint": "oxygen-saturation",
+      "action": "list",
+      "filter": "oxygen_saturation.sample_time.physical_time >= \"2026-05-05T02:40:28Z\"",
+      "status": 200,
+      "point_count": 50,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "PASSIVELY_MEASURED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "oxygenSaturation": {
+            "sampleTime": {
+              "physicalTime": "2026-05-18T18:31:50Z",
+              "utcOffset": "-10800s",
+              "civilTime": {
+                "date": {
+                  "year": 2026,
+                  "month": 5,
+                  "day": 18
+                },
+                "time": {
+                  "hours": 15,
+                  "minutes": 31,
+                  "seconds": 50
+                }
+              }
+            },
+            "percentage": 95.8
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "PASSIVELY_MEASURED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "oxygenSaturation": {
+            "sampleTime": {
+              "physicalTime": "2026-05-18T18:30:50Z",
+              "utcOffset": "-10800s",
+              "civilTime": {
+                "date": {
+                  "year": 2026,
+                  "month": 5,
+                  "day": 18
+                },
+                "time": {
+                  "hours": 15,
+                  "minutes": 30,
+                  "seconds": 50
+                }
+              }
+            },
+            "percentage": 50
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-18"
+      ],
+      "coverage_days": 1
+    },
+    {
+      "label": "spo2_daily",
+      "endpoint": "daily-oxygen-saturation",
+      "action": "list",
+      "filter": "daily_oxygen_saturation.date >= \"2026-05-05\"",
+      "status": 200,
+      "point_count": 11,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "PASSIVELY_MEASURED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyOxygenSaturation": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "averagePercentage": 95.9,
+            "lowerBoundPercentage": 94.6,
+            "upperBoundPercentage": 98.7,
+            "standardDeviationPercentage": 0.8
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "PASSIVELY_MEASURED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyOxygenSaturation": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 16
+            },
+            "averagePercentage": 95.5,
+            "lowerBoundPercentage": 93.6,
+            "upperBoundPercentage": 97.5,
+            "standardDeviationPercentage": 0.9
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-18"
+      ],
+      "coverage_days": 11
+    },
+    {
+      "label": "resp_rate_daily",
+      "endpoint": "daily-respiratory-rate",
+      "action": "list",
+      "filter": "daily_respiratory_rate.date >= \"2026-05-05\"",
+      "status": 200,
+      "point_count": 12,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyRespiratoryRate": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "breathsPerMinute": 10.4
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyRespiratoryRate": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 16
+            },
+            "breathsPerMinute": 10.4
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-18"
+      ],
+      "coverage_days": 12
+    },
+    {
+      "label": "resp_rate_sleep",
+      "endpoint": "respiratory-rate-sleep-summary",
+      "action": "list",
+      "filter": "respiratory_rate_sleep_summary.sleep_session_start_time >= \"2026-05-05T02:40:28Z\"",
+      "status": 400,
+      "error_body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid data point filter: INVALID_DATA_POINT_FILTER_DATA_TYPE_MEMBER.\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"INVALID_DATA_POINT_FILTER\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"detailedReasons\": \"INVALID_DATA_POINT_FILTER_DATA_TYPE_MEMBER\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"filter\",\n            \"description\": \"Member 'respiratory_rate_sleep_summary.sleep_session_start_time' is not supported for filtering. (at line 1, column 1)\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+    },
+    {
+      "label": "skin_temp_derivations",
+      "endpoint": "daily-sleep-temperature-derivations",
+      "action": "list",
+      "filter": "daily_sleep_temperature_derivations.date >= \"2026-05-05\"",
+      "status": 200,
+      "point_count": 12,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailySleepTemperatureDerivations": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "nightlyTemperatureCelsius": 31.84955357142858,
+            "baselineTemperatureCelsius": 32.80335648148147,
+            "relativeNightlyStddev30dCelsius": 0.7778055621103274
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailySleepTemperatureDerivations": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 16
+            },
+            "nightlyTemperatureCelsius": 31.906260869565216,
+            "baselineTemperatureCelsius": 32.81640622001537,
+            "relativeNightlyStddev30dCelsius": 0.7805731894504631
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-18"
+      ],
+      "coverage_days": 12
+    },
+    {
+      "label": "vo2_max",
+      "endpoint": "vo2-max",
+      "action": "list",
+      "filter": "vo2_max.sample_time.physical_time >= \"2026-05-05T02:40:28Z\"",
+      "status": 200,
+      "point_count": 0
+    },
+    {
+      "label": "vo2_max_daily",
+      "endpoint": "daily-vo2-max",
+      "action": "list",
+      "filter": "daily_vo2_max.date >= \"2026-05-05\"",
+      "status": 200,
+      "point_count": 0
+    },
+    {
+      "label": "vo2_max_run",
+      "endpoint": "run-vo2-max",
+      "action": "list",
+      "filter": "run_vo2_max.sample_time.physical_time >= \"2026-05-05T02:40:28Z\"",
+      "status": 200,
+      "point_count": 0
+    },
+    {
+      "label": "hydration_log",
+      "endpoint": "hydration-log",
+      "action": "list",
+      "filter": "hydration_log.sample_time.physical_time >= \"2026-05-05T02:40:28Z\"",
+      "status": 403,
+      "error_body": "{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Required OAuth scope(s) are missing for this operation.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"MISSING_OAUTH_SCOPE\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"any_of_required\": \"nutrition OR nutrition_readonly\"\n        }\n      }\n    ]\n  }\n}\n"
+    },
+    {
+      "label": "known_resting_hr",
+      "endpoint": "daily-resting-heart-rate",
+      "action": "list",
+      "filter": "daily_resting_heart_rate.date >= \"2026-05-05\"",
+      "status": 200,
+      "point_count": 14,
+      "sample_points": [
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyRestingHeartRate": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "beatsPerMinute": "60",
+            "dailyRestingHeartRateMetadata": {
+              "calculationMethod": "WITH_SLEEP"
+            }
+          }
+        },
+        {
+          "dataSource": {
+            "recordingMethod": "DERIVED",
+            "device": {
+              "displayName": "Pixel Watch 3"
+            },
+            "platform": "FITBIT"
+          },
+          "dailyRestingHeartRate": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 17
+            },
+            "beatsPerMinute": "60",
+            "dailyRestingHeartRateMetadata": {
+              "calculationMethod": "ONLY_WITH_AWAKE_DATA"
+            }
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-17",
+        "2026-05-18"
+      ],
+      "coverage_days": 14
+    },
+    {
+      "label": "known_weight",
+      "endpoint": "weight",
+      "action": "list",
+      "filter": "weight.sample_time.civil_time >= \"2026-05-05T02:40:28\"",
+      "status": 200,
+      "point_count": 5,
+      "sample_points": [
+        {
+          "name": "users/7108215177813058725/dataTypes/weight/dataPoints/1778829993000",
+          "dataSource": {
+            "recordingMethod": "UNKNOWN",
+            "application": {
+              "webClientId": "22C4KQ"
+            },
+            "platform": "FITBIT_WEB_API"
+          },
+          "weight": {
+            "sampleTime": {
+              "physicalTime": "2026-05-15T10:26:33Z",
+              "utcOffset": "-10800s",
+              "civilTime": {
+                "date": {
+                  "year": 2026,
+                  "month": 5,
+                  "day": 15
+                },
+                "time": {
+                  "hours": 7,
+                  "minutes": 26,
+                  "seconds": 33
+                }
+              }
+            },
+            "weightGrams": 82800
+          }
+        },
+        {
+          "name": "users/7108215177813058725/dataTypes/weight/dataPoints/1778570812000",
+          "dataSource": {
+            "recordingMethod": "UNKNOWN",
+            "application": {
+              "webClientId": "22C4KQ"
+            },
+            "platform": "FITBIT_WEB_API"
+          },
+          "weight": {
+            "sampleTime": {
+              "physicalTime": "2026-05-12T10:26:52Z",
+              "utcOffset": "-10800s",
+              "civilTime": {
+                "date": {
+                  "year": 2026,
+                  "month": 5,
+                  "day": 12
+                },
+                "time": {
+                  "hours": 7,
+                  "minutes": 26,
+                  "seconds": 52
+                }
+              }
+            },
+            "weightGrams": 83100
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-12",
+        "2026-05-15"
+      ],
+      "coverage_days": 5
+    },
+    {
+      "label": "rollup_distance",
+      "endpoint": "distance",
+      "action": "dailyRollUp",
+      "status": 200,
+      "point_count": 15,
+      "sample_points": [
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {
+              "hours": 23,
+              "minutes": 59,
+              "seconds": 59
+            }
+          },
+          "distance": {
+            "millimetersSum": "3990000"
+          }
+        },
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 17
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "distance": {
+            "millimetersSum": "3629077"
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-17",
+        "2026-05-18"
+      ],
+      "coverage_days": 15
+    },
+    {
+      "label": "rollup_floors",
+      "endpoint": "floors",
+      "action": "dailyRollUp",
+      "status": 200,
+      "point_count": 15,
+      "sample_points": [
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {
+              "hours": 23,
+              "minutes": 59,
+              "seconds": 59
+            }
+          },
+          "floors": {
+            "countSum": "14"
+          }
+        },
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 17
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "floors": {
+            "countSum": "10"
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-17",
+        "2026-05-18"
+      ],
+      "coverage_days": 15
+    },
+    {
+      "label": "rollup_basal_calories",
+      "endpoint": "basal-energy-burned",
+      "action": "dailyRollUp",
+      "status": 400,
+      "error_body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"DailyRollup is not supported for data type basal-energy-burned, but the following actions are supported: list, reconcile\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"UNSUPPORTED_DATA_TYPE_ACTION\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"allowed_actions\": \"list,reconcile\",\n          \"attempted_action\": \"dailyRollup\",\n          \"data_type\": \"basal-energy-burned\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"action\",\n            \"description\": \"DailyRollup is not supported for data type basal-energy-burned, but "
+    },
+    {
+      "label": "rollup_active_minutes",
+      "endpoint": "active-minutes",
+      "action": "dailyRollUp",
+      "status": 200,
+      "point_count": 15,
+      "sample_points": [
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {
+              "hours": 23,
+              "minutes": 59,
+              "seconds": 59
+            }
+          },
+          "activeMinutes": {
+            "activeMinutesRollupByActivityLevel": [
+              {
+                "activityLevel": "LIGHT",
+                "activeMinutesSum": "92"
+              },
+              {
+                "activityLevel": "MODERATE",
+                "activeMinutesSum": "5"
+              },
+              {
+                "activityLevel": "VIGOROUS",
+                "activeMinutesSum": "17"
+              }
+            ]
+          }
+        },
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 17
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "activeMinutes": {
+            "activeMinutesRollupByActivityLevel": [
+              {
+                "activityLevel": "LIGHT",
+                "activeMinutesSum": "63"
+              },
+              {
+                "activityLevel": "MODERATE",
+                "activeMinutesSum": "26"
+              },
+              {
+                "activityLevel": "VIGOROUS",
+                "activeMinutesSum": "70"
+              }
+            ]
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-17",
+        "2026-05-18"
+      ],
+      "coverage_days": 15
+    },
+    {
+      "label": "rollup_active_zone_minutes",
+      "endpoint": "active-zone-minutes",
+      "action": "dailyRollUp",
+      "status": 200,
+      "point_count": 15,
+      "sample_points": [
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {
+              "hours": 23,
+              "minutes": 59,
+              "seconds": 59
+            }
+          },
+          "activeZoneMinutes": {
+            "sumInCardioHeartZone": "0",
+            "sumInPeakHeartZone": "0",
+            "sumInFatBurnHeartZone": "9"
+          }
+        },
+        {
+          "civilStartTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 17
+            },
+            "time": {}
+          },
+          "civilEndTime": {
+            "date": {
+              "year": 2026,
+              "month": 5,
+              "day": 18
+            },
+            "time": {}
+          },
+          "activeZoneMinutes": {
+            "sumInCardioHeartZone": "14",
+            "sumInPeakHeartZone": "0",
+            "sumInFatBurnHeartZone": "93"
+          }
+        }
+      ],
+      "distinct_days": [
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+        "2026-05-13",
+        "2026-05-14",
+        "2026-05-15",
+        "2026-05-16",
+        "2026-05-17",
+        "2026-05-18"
+      ],
+      "coverage_days": 15
+    },
+    {
+      "label": "rollup_hrv",
+      "endpoint": "heart-rate-variability",
+      "action": "dailyRollUp",
+      "status": 400,
+      "error_body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"DailyRollup is not supported for data type heart-rate-variability, but the following actions are supported: import, list, reconcile, purge\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"UNSUPPORTED_DATA_TYPE_ACTION\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"allowed_actions\": \"import,list,reconcile,purge\",\n          \"attempted_action\": \"dailyRollup\",\n          \"data_type\": \"heart-rate-variability\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"action\",\n            \"description\": \"DailyRollup is not supported for d"
+    },
+    {
+      "label": "rollup_spo2",
+      "endpoint": "oxygen-saturation",
+      "action": "dailyRollUp",
+      "status": 400,
+      "error_body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"DailyRollup is not supported for data type oxygen-saturation, but the following actions are supported: import, list, reconcile\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"UNSUPPORTED_DATA_TYPE_ACTION\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"allowed_actions\": \"import,list,reconcile\",\n          \"attempted_action\": \"dailyRollup\",\n          \"data_type\": \"oxygen-saturation\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"action\",\n            \"description\": \"DailyRollup is not supported for data type oxygen-saturat"
+    },
+    {
+      "label": "rollup_resp_rate",
+      "endpoint": "respiratory-rate",
+      "action": "dailyRollUp",
+      "status": 400,
+      "error_body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid data type ID referenced in the parent data type collection: respiratory-rate\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"INVALID_PARENT_DATA_TYPE_COLLECTION\",\n        \"domain\": \"health.googleapis.com\",\n        \"metadata\": {\n          \"dataType\": \"respiratory-rate\"\n        }\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"parent\",\n            \"description\": \"The data type ID 'respiratory-rate' is not supported.\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+    }
+  ]
+}
