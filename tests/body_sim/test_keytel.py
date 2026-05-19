@@ -24,8 +24,9 @@ def test_keytel_per_minute_female_known_value():
 
 def test_keytel_per_minute_clips_negative():
     # At very low HR the formula goes negative; should clip to 0
+    # raw = -55.0969 + 0.6309*40 + 0.1988*80 + 0.2017*40 ≈ -1.407 kJ/min → 0.0 kcal/min
     result = keytel.kcal_per_min(hr=40, weight_kg=80, age=40, sex="male")
-    assert result >= 0
+    assert result == 0.0
 
 
 def test_keytel_per_minute_rejects_invalid_sex():
@@ -48,6 +49,14 @@ def test_keytel_daily_integral_handles_nan():
     total = keytel.daily_integral(hrs, weight_kg=80, age=40, sex="male")
     # Should integrate only over the 720 non-NaN minutes
     expected = 720 * keytel.kcal_per_min(120, 80, 40, "male")
+    assert total == pytest.approx(expected, abs=1.0)
+
+
+def test_keytel_daily_integral_female():
+    # Female path coefficient sanity — guards against sign-flip on weight_kg
+    hrs = np.full(1440, 120.0)
+    total = keytel.daily_integral(hrs, weight_kg=70, age=40, sex="female")
+    expected = 1440 * keytel.kcal_per_min(120, 70, 40, "female")
     assert total == pytest.approx(expected, abs=1.0)
 
 

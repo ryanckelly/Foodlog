@@ -24,7 +24,7 @@ def kcal_per_min(hr: float, weight_kg: float, age: int, sex: str) -> float:
         raw = -20.4022 + 0.4472 * hr - 0.1263 * weight_kg + 0.074 * age
     else:
         raise ValueError(f"sex must be 'male' or 'female', got {sex!r}")
-    return max(0.0, raw / 4.184)
+    return max(0.0, raw / 4.184)  # kJ/min → kcal/min (1 kcal = 4.184 kJ)
 
 
 def daily_integral(
@@ -47,7 +47,7 @@ def daily_integral(
         raw = -20.4022 + 0.4472 * hr_minutes - 0.1263 * weight_kg + 0.074 * age
     else:
         raise ValueError(f"sex must be 'male' or 'female', got {sex!r}")
-    per_min = np.clip(raw / 4.184, 0.0, None)
+    per_min = np.clip(raw / 4.184, 0.0, None)  # kJ/min → kcal/min
     return float(np.nansum(per_min))
 
 
