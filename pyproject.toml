@@ -29,9 +29,17 @@ dev = [
     "pytest-httpx>=0.30.0",
     "respx>=0.22.0",
 ]
+body_sim = [
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "scipy>=1.13.0",
+    "matplotlib>=3.8.0",
+    "ipywidgets>=8.1.0",
+    "jupyter>=1.0.0",
+]
 
 [tool.setuptools]
-packages = ["foodlog", "foodlog.api", "foodlog.api.routers", "foodlog.clients", "foodlog.db", "foodlog.models", "foodlog.services", "mcp_server"]
+packages = ["foodlog", "foodlog.api", "foodlog.api.routers", "foodlog.clients", "foodlog.db", "foodlog.models", "foodlog.services", "mcp_server", "body_sim"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -64,7 +64,7 @@ observation_t = g(state_t) + noise
 
 The state tracks two slow compartments (fat mass `F`, lean mass `L`) and two fast compartments (glycogen-bound water, sodium-bound water). The inputs are daily food intake (kcal + macros + sodium) and daily activity (HR-derived expenditure, vigorous minutes, workouts). The observation is the morning scale reading (weight in kg and bf%).
 
-Per-day update (sketch — full equations live in `src/body_sim/model.py`):
+Per-day update (sketch — full equations live in `body_sim/model.py`):
 
 ```
 TEF      = 0.25·protein_kcal + 0.08·carb_kcal + 0.03·fat_kcal
@@ -104,7 +104,7 @@ The standard tooling is PyMC. ~50-200 lines for the full model.
 
 ## Data inputs — canonical daily-rollup table
 
-One row per calendar day, produced by `src/body_sim/pipeline.py::build_daily_rollup(start, end)`:
+One row per calendar day, produced by `body_sim/pipeline.py::build_daily_rollup(start, end)`:
 
 | Column | Unit | Source | If missing |
 |---|---|---|---|
@@ -238,7 +238,7 @@ The sub-project decomposes into four phases. Each phase is a beads epic; phase-2
 - `notebooks/04_hall_baseline.ipynb` — extended Hall model with TEF + HR-derived EE + glycogen-water + sodium-water, population-default parameters, observed-vs-predicted trajectory plot
 - `notebooks/06_scenario_simulator.ipynb` — `ipywidgets` sliders for intake kcal, macro split, steps, vigorous_min, horizon — renders trajectory bands using population priors
 - `notebooks/07_live_tracking.ipynb` — scaffold for weekly forecast logging (so Phase 2 has something to score)
-- `src/body_sim/` Python module with `model.py`, `pipeline.py`, `keytel.py`, `validation.py`, `evaluate.py`
+- `body_sim/` Python module with `model.py`, `pipeline.py`, `keytel.py`, `validation.py`, `evaluate.py`
 - `tests/body_sim/` — unit tests for the rollup pipeline, Keytel integration, Hall update step, validation harness
 
 **Parallel enablers** (non-blocking, can land any time during Phase 1):
@@ -345,7 +345,7 @@ notebooks/                       # new
   06_scenario_simulator.ipynb
   07_live_tracking.ipynb
   08_residual_ml.ipynb           # Phase 4 only
-src/body_sim/                    # new — reusable code consumed by notebooks
+body_sim/                        # new — reusable code consumed by notebooks
   __init__.py
   pipeline.py                    # build_daily_rollup, missingness conventions
   keytel.py                      # HR → kcal-per-min via Keytel equation
@@ -365,7 +365,9 @@ tests/body_sim/                  # new
   test_validation.py             # forward-walking harness behaves on known input
 ```
 
-`src/body_sim/` follows the same pattern as `~/hockey/src/` — Python modules anchored via `Path(__file__).resolve().parent.parent` so notebook CWD does not break paths.
+`body_sim/` follows the same pattern as `~/hockey/src/` — Python modules anchored via `Path(__file__).resolve().parent.parent` so notebook CWD does not break paths.
+
+**Layout note:** This deviates from the hockey reference project's `src/` convention because foodlog's existing pattern is top-level packages (`foodlog/`, `mcp_server/`). Keeping `body_sim/` at the top level matches the repo and avoids mixing src-layout and flat-layout in one `pyproject.toml`.
 
 ## Open questions / known limitations
 
