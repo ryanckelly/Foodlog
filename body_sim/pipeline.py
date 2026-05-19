@@ -408,3 +408,62 @@ def rollup_workouts(
         per_day.get(ts.date(), {"workout_kcal": 0.0, "workout_min": 0}) for ts in idx
     ]
     return pd.DataFrame(records, index=idx)
+
+
+def build_daily_rollup(
+    session: Session,
+    start: datetime.date,
+    end: datetime.date,
+    weight_kg_fallback: float,
+    age: int,
+    sex: str,
+) -> pd.DataFrame:
+    """Build the canonical daily-rollup DataFrame for body_sim.
+
+    Args:
+        session: SQLAlchemy session against the foodlog DB
+        start, end: inclusive date range
+        weight_kg_fallback: weight to use for Keytel on days before any observed weigh-in
+        age, sex: user profile
+
+    Returns:
+        DataFrame indexed by date, one row per day in [start, end].
+    """
+    food = rollup_food(session, start, end)
+    bc = rollup_body_comp(session, start, end)
+    rhr = rollup_rhr(session, start, end)
+    sleep = rollup_sleep(session, start, end)
+    workouts = rollup_workouts(session, start, end)
+
+    # Reference weight per day: most recent observed weight up to and including that day,
+    # or fallback if none yet observed.
+    weight_series = bc["weight_kg"].ffill().fillna(weight_kg_fallback)
+    activity = rollup_activity_with_per_day_weight(
+        session, start, end, weight_series, age, sex
+    )
+
+    df = pd.concat([food, activity, bc, rhr, sleep, workouts], axis=1)
+    df["reference_weight_kg"] = weight_series
+    return df
+
+
+def rollup_activity_with_per_day_weight(
+    session: Session,
+    start: datetime.date,
+    end: datetime.date,
+    weight_series: pd.Series,
+    age: int,
+    sex: str,
+) -> pd.DataFrame:
+    """Variant of rollup_activity that uses a per-day weight Series for Keytel.
+
+    Calls rollup_activity day-by-day so the Keytel integral matches the
+    reference weight on each day. Slightly wasteful in queries but trivial for
+    Phase 1 data volumes.
+    """
+    frames = []
+    for ts, weight in weight_series.items():
+        d = ts.date()
+        sub = rollup_activity(session, start=d, end=d, weight_kg=float(weight), age=age, sex=sex)
+        frames.append(sub)
+    return pd.concat(frames)
