@@ -93,3 +93,26 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Body-Composition Simulator Sub-Project (beads conventions)
+
+The notebook-driven body-composition modeling sub-project (energy-balance / Hall-style scenario simulator) uses additional labels on top of the standard beads workflow:
+
+- **`body-sim`** — umbrella label for every bead in this sub-project. Use `bd list --label=body-sim` to scope to it.
+- **`phase-1` / `phase-2` / `phase-3` / `phase-4`** — phase milestone label. Every bead in this sub-project must carry exactly one phase label so it can be filtered with `bd list --label=body-sim,phase-2` (comma-separated = AND).
+
+Phase meanings:
+
+| Label | Milestone | Trigger |
+|---|---|---|
+| `phase-1` | Extended Hall model with population-default parameters; pipeline + scenario sim v1 | Current |
+| `phase-2` | Personalize `intake_bias` and `RMR_scale` via PyMC | ~4-6 more weeks of body-comp data |
+| `phase-3` | Add `NEAT_response`, `protein_protection`, `activity_bias` to Bayesian fit | ~3+ months of data |
+| `phase-4` | (Optional) ML residual model on top of mechanistic baseline | ~6+ months of data + residuals show structure |
+
+When creating any new bead for this sub-project, pass both labels:
+
+```bash
+bd create --type=task --labels=body-sim,phase-1 --title="..." --description="..."
+```
+
