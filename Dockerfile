@@ -13,6 +13,7 @@ RUN apt-get update \
 COPY pyproject.toml ./
 COPY foodlog/ ./foodlog/
 COPY mcp_server/ ./mcp_server/
+COPY body_sim/ ./body_sim/
 
 RUN pip install --no-cache-dir -e .
 

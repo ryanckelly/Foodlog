@@ -1,0 +1,71 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/sleep/dataPoints/sleep-stages-2026-05-18",
+      "dataSource": {
+        "recordingMethod": "DERIVED",
+        "device": {"displayName": "Pixel Watch 3"},
+        "platform": "FITBIT"
+      },
+      "sleep": {
+        "interval": {
+          "startTime": "2026-05-18T02:17:00Z",
+          "startUtcOffset": "-10800s",
+          "endTime": "2026-05-18T09:44:30Z",
+          "endUtcOffset": "-10800s"
+        },
+        "type": "STAGES",
+        "metadata": {
+          "stagesStatus": "SUCCEEDED",
+          "processed": true,
+          "nap": false
+        },
+        "summary": {
+          "minutesInSleepPeriod": "447",
+          "minutesAfterWakeUp": "0",
+          "minutesToFallAsleep": "0",
+          "minutesAsleep": "405",
+          "minutesAwake": "42",
+          "stagesSummary": [
+            {"type": "AWAKE", "minutes": "42", "count": "3"},
+            {"type": "LIGHT", "minutes": "245", "count": "10"},
+            {"type": "DEEP",  "minutes": "101", "count": "6"},
+            {"type": "REM",   "minutes": "59",  "count": "4"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "users/me/dataTypes/sleep/dataPoints/sleep-classic-2026-04-26",
+      "dataSource": {"device": {"displayName": "older watch"}, "platform": "FITBIT"},
+      "sleep": {
+        "interval": {
+          "startTime": "2026-04-26T01:05:00Z",
+          "startUtcOffset": "-10800s",
+          "endTime": "2026-04-26T08:30:00Z",
+          "endUtcOffset": "-10800s"
+        },
+        "type": "CLASSIC"
+      }
+    },
+    {
+      "name": "users/me/dataTypes/sleep/dataPoints/sleep-nap-rejected-2026-05-10",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "sleep": {
+        "interval": {
+          "startTime": "2026-05-10T17:30:00Z",
+          "startUtcOffset": "-10800s",
+          "endTime": "2026-05-10T18:25:00Z",
+          "endUtcOffset": "-10800s"
+        },
+        "type": "STAGES",
+        "metadata": {
+          "stagesStatus": "REJECTED_NAP",
+          "processed": true,
+          "nap": true
+        }
+      }
+    }
+  ],
+  "nextPageToken": ""
+}

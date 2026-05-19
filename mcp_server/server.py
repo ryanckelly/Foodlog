@@ -317,9 +317,16 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
     def get_sleep(
         start_date: str | None = None, end_date: str | None = None
     ) -> dict:
-        """Get sleep sessions (start time, end time, duration) for a date range.
+        """Get sleep sessions for a date range.
 
         Filters by the session's start date. Defaults to the last 7 days.
+
+        Each item includes session envelope (start_at, end_at, duration_min,
+        source) and — when available — stage breakdown from Pixel Watch's
+        STAGES sessions: sleep_type (STAGES/CLASSIC), nap, stages_status,
+        and per-stage minute totals (awake_min, light_min, deep_min, rem_min,
+        restless_min, asleep_min, in_period_min). Older rows and CLASSIC
+        sessions return null for the stage fields.
 
         Args:
             start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
@@ -349,6 +356,16 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                         "end_at": r.end_at.isoformat(),
                         "duration_min": r.duration_min,
                         "source": r.source,
+                        "sleep_type": r.sleep_type,
+                        "nap": r.nap,
+                        "stages_status": r.stages_status,
+                        "awake_min": r.awake_min,
+                        "light_min": r.light_min,
+                        "deep_min": r.deep_min,
+                        "rem_min": r.rem_min,
+                        "restless_min": r.restless_min,
+                        "asleep_min": r.asleep_min,
+                        "in_period_min": r.in_period_min,
                     }
                     for r in rows
                 ]

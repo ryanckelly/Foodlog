@@ -122,6 +122,19 @@ class SleepSessionRow:
     end_at: datetime.datetime
     duration_min: int
     source: str
+    # Fields from sleep.type, sleep.metadata, sleep.summary.stagesSummary on the
+    # v4 Sleep payload. All None on CLASSIC sessions (and on STAGES sessions
+    # that Google flags as REJECTED_* via metadata.stagesStatus).
+    sleep_type: str | None = None
+    nap: bool | None = None
+    stages_status: str | None = None
+    awake_min: int | None = None
+    light_min: int | None = None
+    deep_min: int | None = None
+    rem_min: int | None = None
+    restless_min: int | None = None
+    asleep_min: int | None = None
+    in_period_min: int | None = None
 
 
 @dataclass(slots=True)
@@ -197,6 +210,31 @@ def _source_from(data_source: dict | None) -> str:
 def _synth_id(prefix: str, *parts: str) -> str:
     """Stable synthetic id for types where Google doesn't emit top-level `name`."""
     return prefix + "|" + "|".join(p for p in parts if p)
+
+
+def _parse_int_string(v: object) -> int | None:
+    """v4 returns several int64 fields as JSON strings ("405", not 405)."""
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_stages_summary(entries: list) -> dict[str, int]:
+    """Map sleep.summary.stagesSummary into {stage_type: minutes}.
+
+    Tolerates unknown stage types (forward compat if Google adds new ones)
+    and missing/malformed `minutes` values (drops them silently).
+    """
+    out: dict[str, int] = {}
+    for e in entries:
+        stage = e.get("type") if isinstance(e, dict) else None
+        mins = _parse_int_string(e.get("minutes")) if isinstance(e, dict) else None
+        if stage and mins is not None:
+            out[stage] = mins
+    return out
 
 
 class GoogleHealthClient:
@@ -495,12 +533,26 @@ class GoogleHealthClient:
             name = pt.get("name") or _synth_id(
                 "sleep", _source_from(pt.get("dataSource")), start_s,
             )
+            sleep_type = sleep.get("type")
+            metadata = sleep.get("metadata") or {}
+            summary = sleep.get("summary") or {}
+            stage_min = _parse_stages_summary(summary.get("stagesSummary") or [])
             yield SleepSessionRow(
                 external_id=name,
                 start_at=start,
                 end_at=end,
                 duration_min=int((end - start).total_seconds() // 60),
                 source=_source_from(pt.get("dataSource")),
+                sleep_type=sleep_type,
+                nap=metadata.get("nap"),
+                stages_status=metadata.get("stagesStatus"),
+                awake_min=stage_min.get("AWAKE"),
+                light_min=stage_min.get("LIGHT"),
+                deep_min=stage_min.get("DEEP"),
+                rem_min=stage_min.get("REM"),
+                restless_min=stage_min.get("RESTLESS"),
+                asleep_min=_parse_int_string(summary.get("minutesAsleep")),
+                in_period_min=_parse_int_string(summary.get("minutesInSleepPeriod")),
             )
 
     async def list_workouts(

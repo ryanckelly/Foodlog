@@ -109,6 +109,56 @@ async def test_list_sleep_sessions(http):
         assert rows[0].duration_min == 435  # 7h15m
         assert rows[0].source == "Pixel Watch 3"
         assert rows[0].external_id.endswith("sleep-2026-04-22")
+        # The legacy fixture has type=STAGES but no metadata/summary — should
+        # parse cleanly with None for the per-stage fields.
+        assert rows[0].sleep_type == "STAGES"
+        assert rows[0].deep_min is None
+        assert rows[0].asleep_min is None
+
+
+async def test_list_sleep_sessions_stages_summary(http):
+    """STAGES session with metadata + summary fills every per-stage column;
+    CLASSIC session populates only sleep_type; REJECTED_NAP session keeps the
+    nap flag and stages_status but leaves stage minutes None."""
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.get(url__regex=r".*/sleep/dataPoints.*").mock(
+            return_value=httpx.Response(200, json=_load("sleep_sessions_stages.json"))
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_sleep_sessions(
+            since=datetime.datetime(2026, 4, 1),
+        )]
+        assert len(rows) == 3
+        by_id = {r.external_id.split("/")[-1]: r for r in rows}
+
+        # 1. Full STAGES session with summary
+        stages = by_id["sleep-stages-2026-05-18"]
+        assert stages.sleep_type == "STAGES"
+        assert stages.nap is False
+        assert stages.stages_status == "SUCCEEDED"
+        assert stages.awake_min == 42
+        assert stages.light_min == 245
+        assert stages.deep_min == 101
+        assert stages.rem_min == 59
+        assert stages.restless_min is None  # not in stagesSummary for this night
+        assert stages.asleep_min == 405
+        assert stages.in_period_min == 447
+
+        # 2. CLASSIC session — no metadata, no summary
+        classic = by_id["sleep-classic-2026-04-26"]
+        assert classic.sleep_type == "CLASSIC"
+        assert classic.nap is None
+        assert classic.stages_status is None
+        assert classic.deep_min is None
+        assert classic.asleep_min is None
+
+        # 3. Rejected nap — has metadata but no summary
+        rejected = by_id["sleep-nap-rejected-2026-05-10"]
+        assert rejected.sleep_type == "STAGES"
+        assert rejected.nap is True
+        assert rejected.stages_status == "REJECTED_NAP"
+        assert rejected.deep_min is None
+        assert rejected.asleep_min is None
 
 
 async def test_list_workouts(http):

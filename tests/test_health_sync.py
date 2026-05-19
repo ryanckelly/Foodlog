@@ -193,6 +193,103 @@ async def test_sync_interval_activity_upserts_with_nullable_columns(db_session):
 
 
 @pytest.mark.asyncio
+async def test_sync_sleep_persists_stage_breakdown(db_session):
+    """STAGES session writes per-stage minute totals + metadata into the
+    extended sleep_sessions columns; CLASSIC session leaves stage fields
+    null but still gets a row."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    stages_row = SleepSessionRow(
+        external_id="sleep-stages-1",
+        start_at=datetime.datetime(2026, 5, 18, 2, 17),
+        end_at=datetime.datetime(2026, 5, 18, 9, 44, 30),
+        duration_min=447,
+        source="Pixel Watch 3",
+        sleep_type="STAGES",
+        nap=False,
+        stages_status="SUCCEEDED",
+        awake_min=42, light_min=245, deep_min=101, rem_min=59,
+        restless_min=None,
+        asleep_min=405, in_period_min=447,
+    )
+    classic_row = SleepSessionRow(
+        external_id="sleep-classic-1",
+        start_at=datetime.datetime(2026, 4, 26, 1, 5),
+        end_at=datetime.datetime(2026, 4, 26, 8, 30),
+        duration_min=445,
+        source="older watch",
+        sleep_type="CLASSIC",
+        # nap, stages_status, and stage minutes all None by default
+    )
+
+    class StubClient:
+        async def list_sleep_sessions(self, since, until=None):
+            yield stages_row
+            yield classic_row
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_sleep()
+    assert n == 2
+    stored = {s.external_id: s for s in db_session.query(SleepSession).all()}
+
+    s = stored["sleep-stages-1"]
+    assert s.sleep_type == "STAGES"
+    assert s.nap is False
+    assert s.stages_status == "SUCCEEDED"
+    assert (s.awake_min, s.light_min, s.deep_min, s.rem_min) == (42, 245, 101, 59)
+    assert s.asleep_min == 405
+    assert s.in_period_min == 447
+
+    c = stored["sleep-classic-1"]
+    assert c.sleep_type == "CLASSIC"
+    assert c.nap is None
+    assert c.stages_status is None
+    assert c.deep_min is None
+
+
+@pytest.mark.asyncio
+async def test_sync_sleep_updates_stage_columns_on_conflict(db_session):
+    """Re-syncing the same session with updated stagesSummary overwrites the
+    prior values via the on_conflict_do_update path (covers the case where
+    Google revises a night's stage analysis after initial save)."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    initial = SleepSessionRow(
+        external_id="sleep-revise-1",
+        start_at=datetime.datetime(2026, 5, 1, 23, 0),
+        end_at=datetime.datetime(2026, 5, 2, 6, 30),
+        duration_min=450,
+        source="Pixel Watch 3",
+        sleep_type="STAGES",
+        nap=False, stages_status="SUCCEEDED",
+        awake_min=30, light_min=240, deep_min=90, rem_min=90,
+        asleep_min=420, in_period_min=450,
+    )
+    revised = SleepSessionRow(
+        external_id="sleep-revise-1",  # same id
+        start_at=initial.start_at, end_at=initial.end_at,
+        duration_min=450, source="Pixel Watch 3",
+        sleep_type="STAGES",
+        nap=False, stages_status="SUCCEEDED",
+        awake_min=20, light_min=250, deep_min=95, rem_min=85,  # revised
+        asleep_min=430, in_period_min=450,
+    )
+
+    class StubClient:
+        def __init__(self, rows): self._rows = rows
+        async def list_sleep_sessions(self, since, until=None):
+            for r in self._rows: yield r
+
+    svc = HealthSyncService(db_session, StubClient([initial]))
+    await svc._sync_sleep()
+    svc._client = StubClient([revised])
+    await svc._sync_sleep()
+    row = db_session.query(SleepSession).filter_by(external_id="sleep-revise-1").one()
+    assert (row.awake_min, row.deep_min, row.rem_min) == (20, 95, 85)
+    assert row.asleep_min == 430
+
+
+@pytest.mark.asyncio
 async def test_sync_interval_azm_upserts(db_session):
     from foodlog.clients.google_health import AzmIntervalRow
     from foodlog.db.models import IntervalAzm

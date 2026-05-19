@@ -175,6 +175,52 @@ def test_get_sleep_filters_by_start_at(db_session):
     assert rows[0]["duration_min"] == 480
 
 
+def test_get_sleep_returns_stage_breakdown_when_present(db_session):
+    """STAGES session exposes per-stage minute totals + metadata through MCP;
+    CLASSIC/legacy rows return null for those fields so consumers can branch
+    on `sleep_type` instead of guessing from missing keys."""
+    db_session.add_all([
+        SleepSession(
+            external_id="s-stages",
+            start_at=datetime.datetime(2026, 5, 18, 2, 17),
+            end_at=datetime.datetime(2026, 5, 18, 9, 44, 30),
+            duration_min=447,
+            source="Pixel Watch 3",
+            sleep_type="STAGES",
+            nap=False,
+            stages_status="SUCCEEDED",
+            awake_min=42, light_min=245, deep_min=101, rem_min=59,
+            asleep_min=405, in_period_min=447,
+        ),
+        SleepSession(
+            external_id="s-legacy",
+            start_at=datetime.datetime(2026, 5, 18, 23, 0),
+            end_at=datetime.datetime(2026, 5, 19, 6, 30),
+            duration_min=450,
+            source="watch",
+            # All stage fields default None — represents pre-foodlog-aul rows
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_sleep")
+    result = fn(start_date="2026-05-18", end_date="2026-05-18")
+    by_id = {r.get("sleep_type") or "legacy": r for r in result["items"]}
+
+    s = by_id["STAGES"]
+    assert s["nap"] is False
+    assert s["stages_status"] == "SUCCEEDED"
+    assert (s["awake_min"], s["light_min"], s["deep_min"], s["rem_min"]) == (42, 245, 101, 59)
+    assert s["asleep_min"] == 405
+    assert s["in_period_min"] == 447
+
+    legacy = by_id["legacy"]
+    assert legacy["sleep_type"] is None
+    assert legacy["nap"] is None
+    assert legacy["deep_min"] is None
+
+
 def test_get_resting_heart_rate_returns_in_range(db_session):
     db_session.add_all([
         RestingHeartRate(

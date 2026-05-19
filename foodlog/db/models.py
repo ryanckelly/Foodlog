@@ -199,6 +199,19 @@ class SleepSession(Base):
     end_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
     duration_min: Mapped[int] = mapped_column(Integer, nullable=False)
     source: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Stage and summary fields from v4 Sleep payload — nullable so historical
+    # rows (pre-foodlog-aul) keep working. STAGES sessions populate every field;
+    # CLASSIC sessions populate only sleep_type. See google_health_v4_quirks memory.
+    sleep_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    nap: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    stages_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    awake_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    light_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deep_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rem_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    restless_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    asleep_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    in_period_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fetched_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

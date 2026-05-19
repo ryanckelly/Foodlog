@@ -113,3 +113,91 @@ def test_google_health_tables_created(db_session):
     }
     missing = required - tables
     assert not missing, f"missing tables: {missing}"
+
+
+def test_ensure_columns_adds_missing_nullable_columns_in_place():
+    """ensure_columns ALTERs an existing SQLite table to add columns the model
+    later grew. Required because create_all is a no-op once the table exists,
+    so column additions (foodlog-aul: sleep stages, etc.) need this shim at
+    startup or the new columns never get added to a live DB.
+    """
+    from sqlalchemy import create_engine, inspect, text
+    from foodlog.db.database import ensure_columns
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE example (id INTEGER PRIMARY KEY, name VARCHAR(64))"
+        ))
+        conn.execute(text("INSERT INTO example (name) VALUES ('row-1')"))
+
+    # First call adds two columns.
+    ensure_columns(engine, "example", {"flag": "BOOLEAN", "count": "INTEGER"})
+    cols = {c["name"]: str(c["type"]).upper() for c in inspect(engine).get_columns("example")}
+    assert "flag" in cols and "BOOL" in cols["flag"]
+    assert "count" in cols and "INT" in cols["count"]
+
+    # Pre-existing row is preserved (no rewrite).
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT name, flag, count FROM example")).fetchone()
+    assert row == ("row-1", None, None)
+
+    # Idempotent — running again is a no-op (no exceptions, no schema churn).
+    ensure_columns(engine, "example", {"flag": "BOOLEAN", "count": "INTEGER"})
+
+    # Missing table → silent no-op (so a misnamed table doesn't crash startup).
+    ensure_columns(engine, "no_such_table", {"foo": "INTEGER"})
+
+
+def test_ensure_columns_adds_sleep_stage_fields_to_existing_legacy_table():
+    """End-to-end: an old sleep_sessions table without the foodlog-aul columns
+    gets the new stage columns added in place — this is the exact upgrade path
+    a live deployment hits when the new build starts against an existing DB.
+    """
+    from sqlalchemy import create_engine, inspect, text
+    from foodlog.db.database import ensure_columns
+    from foodlog.api.app import create_app  # uses the same ensure_columns wiring
+
+    engine = create_engine("sqlite:///:memory:")
+    # Pre-foodlog-aul shape: only the original columns.
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE sleep_sessions (
+                external_id VARCHAR(255) PRIMARY KEY,
+                start_at DATETIME NOT NULL,
+                end_at DATETIME NOT NULL,
+                duration_min INTEGER NOT NULL,
+                source VARCHAR(128) NOT NULL,
+                fetched_at DATETIME
+            )
+        """))
+        conn.execute(text(
+            "INSERT INTO sleep_sessions (external_id, start_at, end_at, duration_min, source) "
+            "VALUES ('legacy-1', '2026-04-01 22:00', '2026-04-02 06:00', 480, 'watch')"
+        ))
+
+    ensure_columns(engine, "sleep_sessions", {
+        "sleep_type": "VARCHAR(32)",
+        "nap": "BOOLEAN",
+        "stages_status": "VARCHAR(64)",
+        "awake_min": "INTEGER",
+        "light_min": "INTEGER",
+        "deep_min": "INTEGER",
+        "rem_min": "INTEGER",
+        "restless_min": "INTEGER",
+        "asleep_min": "INTEGER",
+        "in_period_min": "INTEGER",
+    })
+
+    cols = {c["name"] for c in inspect(engine).get_columns("sleep_sessions")}
+    for new_col in ("sleep_type", "nap", "stages_status", "awake_min",
+                    "light_min", "deep_min", "rem_min", "restless_min",
+                    "asleep_min", "in_period_min"):
+        assert new_col in cols, f"missing {new_col} after ensure_columns"
+
+    # Legacy row still readable, new fields default to NULL.
+    with engine.begin() as conn:
+        row = conn.execute(text(
+            "SELECT external_id, sleep_type, deep_min FROM sleep_sessions"
+        )).fetchone()
+    assert row == ("legacy-1", None, None)

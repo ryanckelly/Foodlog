@@ -214,21 +214,27 @@ class HealthSyncService:
         since = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(days=3)
         rows = [r async for r in self._client.list_sleep_sessions(since=since)]
         for row in rows:
-            stmt = sqlite_insert(SleepSession).values(
+            values = dict(
                 external_id=row.external_id,
                 start_at=row.start_at,
                 end_at=row.end_at,
                 duration_min=row.duration_min,
                 source=row.source,
+                sleep_type=row.sleep_type,
+                nap=row.nap,
+                stages_status=row.stages_status,
+                awake_min=row.awake_min,
+                light_min=row.light_min,
+                deep_min=row.deep_min,
+                rem_min=row.rem_min,
+                restless_min=row.restless_min,
+                asleep_min=row.asleep_min,
+                in_period_min=row.in_period_min,
             )
+            stmt = sqlite_insert(SleepSession).values(**values)
+            update_set = {k: v for k, v in values.items() if k != "external_id"}
             stmt = stmt.on_conflict_do_update(
-                index_elements=["external_id"],
-                set_=dict(
-                    start_at=row.start_at,
-                    end_at=row.end_at,
-                    duration_min=row.duration_min,
-                    source=row.source,
-                ),
+                index_elements=["external_id"], set_=update_set,
             )
             self._db.execute(stmt)
         self._db.commit()

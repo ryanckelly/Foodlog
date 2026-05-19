@@ -37,3 +37,34 @@ def get_session_factory(engine=None):
     if engine is None:
         engine = get_engine()
     return sessionmaker(bind=engine)
+
+
+def ensure_columns(engine, table: str, columns: dict[str, str]) -> None:
+    """Add missing columns to an existing SQLite table.
+
+    SQLAlchemy's ``Base.metadata.create_all`` is no-op when a table already
+    exists, so it never adds columns introduced by later schema changes. This
+    helper closes that gap for nullable, no-default columns — which is the only
+    shape SQLite's ``ALTER TABLE ADD COLUMN`` supports without rewriting the
+    table. Call from the FastAPI lifespan after ``create_all`` for any table
+    that has gained columns post-initial-deploy.
+
+    Args:
+        engine: SQLAlchemy engine bound to a SQLite database.
+        table: Existing table name (no quoting needed).
+        columns: ``{column_name: sqlite_type_decl}`` where the decl is the raw
+            SQLite type, e.g. ``"INTEGER"``, ``"VARCHAR(64)"``, ``"BOOLEAN"``.
+            Always nullable; never include ``NOT NULL`` or ``DEFAULT``.
+    """
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        info = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+        if not info:
+            # Table doesn't exist yet — create_all will handle it on next call.
+            return
+        existing = {row[1] for row in info}  # row[1] is column name
+        for col, decl in columns.items():
+            if col in existing:
+                continue
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {decl}"))
