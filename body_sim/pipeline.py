@@ -16,7 +16,9 @@ import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from foodlog.db.models import FoodEntry
+from foodlog.db.models import DailyActivity, FoodEntry, IntervalAzm, IntervalHeartRate
+
+from body_sim import keytel
 
 
 def _date_index(start: datetime.date, end: datetime.date) -> pd.DatetimeIndex:
@@ -138,3 +140,101 @@ def rollup_food(
     # checks. Cast to object dtype to keep the native Python bool objects.
     df["intake_logged"] = df["intake_logged"].astype(object)
     return df
+
+
+def rollup_activity(
+    session: Session,
+    start: datetime.date,
+    end: datetime.date,
+    weight_kg: float,
+    age: int,
+    sex: str,
+) -> pd.DataFrame:
+    """Aggregate activity sources to one row per day.
+
+    Columns: steps, active_kcal_fitbit, ee_hr_keytel_kcal, hr_coverage_pct,
+    vigorous_min, cardio_min.
+
+    HR coverage is computed by placing the collected bpm_avg values into a
+    1440-slot array (one slot per minute of the day) starting at index 0.
+    This works correctly when the source data is already stored at minute
+    resolution (one row per minute), which is the Fitbit/Pixel Watch convention
+    used in this project.  If future sources have coarser intervals, the
+    coverage calculation will need revisiting.
+
+    Like rollup_food, this function uses datetime comparisons directly on
+    DateTime columns (no func.date() needed) because the filter is an
+    inequality on a full datetime, not a string-based date comparison.
+    """
+    idx = _date_index(start, end)
+    records = {ts.date(): _empty_activity_row() for ts in idx}
+
+    # --- Daily activity (Fitbit rollup) ---
+    da_rows = (
+        session.query(DailyActivity)
+        .filter(DailyActivity.date >= start, DailyActivity.date <= end)
+        .all()
+    )
+    for r in da_rows:
+        cell = records[r.date]
+        cell["steps"] = r.steps
+        cell["active_kcal_fitbit"] = r.active_calories_kcal
+
+    # --- AZM intervals (active zone minutes) ---
+    azm_rows = (
+        session.query(IntervalAzm)
+        .filter(
+            IntervalAzm.start_at >= datetime.datetime.combine(start, datetime.time()),
+            IntervalAzm.start_at < datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time()
+            ),
+        )
+        .all()
+    )
+    for r in azm_rows:
+        d = r.start_at.date()
+        cell = records[d]
+        cell["cardio_min"] += r.cardio_min or 0
+        cell["vigorous_min"] += r.peak_min or 0  # peak = vigorous in our convention
+
+    # --- HR intervals → daily Keytel EE + coverage ---
+    hr_rows = (
+        session.query(IntervalHeartRate)
+        .filter(
+            IntervalHeartRate.start_at >= datetime.datetime.combine(start, datetime.time()),
+            IntervalHeartRate.start_at < datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time()
+            ),
+        )
+        .all()
+    )
+    per_day_hr: dict[datetime.date, list[int]] = {ts.date(): [] for ts in idx}
+    for r in hr_rows:
+        per_day_hr[r.start_at.date()].append(r.bpm_avg)
+
+    for d, bpms in per_day_hr.items():
+        if not bpms:
+            continue
+        # Place collected bpms into a 1440-slot (minutes-in-day) NaN array.
+        # Slots beyond len(bpms) remain NaN → coverage_pct counts them as missing.
+        arr = np.full(1440, np.nan)
+        arr[: len(bpms)] = bpms
+        cell = records[d]
+        cell["ee_hr_keytel_kcal"] = keytel.daily_integral(
+            arr, weight_kg=weight_kg, age=age, sex=sex
+        )
+        cell["hr_coverage_pct"] = keytel.coverage_pct(arr)
+
+    df = pd.DataFrame([records[ts.date()] for ts in idx], index=idx)
+    return df
+
+
+def _empty_activity_row() -> dict:
+    return {
+        "steps": np.nan,
+        "active_kcal_fitbit": np.nan,
+        "ee_hr_keytel_kcal": np.nan,
+        "hr_coverage_pct": 0.0,
+        "vigorous_min": 0,
+        "cardio_min": 0,
+    }
