@@ -96,6 +96,45 @@ async def test_list_resting_heart_rate(http):
         assert rows[0].source == "Pixel Watch 3"
 
 
+async def test_list_daily_hrv(http):
+    """daily-heart-rate-variability parser: full row, partial row, sparse row."""
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.get(url__regex=r".*/daily-heart-rate-variability/dataPoints.*").mock(
+            return_value=httpx.Response(200, json=_load("daily_hrv.json"))
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_daily_hrv(
+            since=datetime.datetime(2026, 5, 1),
+        )]
+        assert len(rows) == 3
+        by_date = {r.date: r for r in rows}
+
+        # 1. Full row — every metric populated. nonRemHeartRateBeatsPerMinute
+        #    arrives as a string<int64>; verify it's parsed to int.
+        full = by_date[datetime.date(2026, 5, 18)]
+        assert full.avg_hrv_ms == pytest.approx(64.7)
+        assert full.deep_sleep_rmssd_ms == pytest.approx(56.25)
+        assert full.non_rem_hr_bpm == 54
+        assert isinstance(full.non_rem_hr_bpm, int)
+        assert full.entropy == pytest.approx(3.142)
+        assert full.source == "Pixel Watch 3"
+
+        # 2. Partial — only avg + deep RMSSD reported.
+        partial = by_date[datetime.date(2026, 5, 17)]
+        assert partial.avg_hrv_ms == pytest.approx(48.0)
+        assert partial.deep_sleep_rmssd_ms == pytest.approx(47.0)
+        assert partial.non_rem_hr_bpm is None
+        assert partial.entropy is None
+
+        # 3. Sparse — only entropy. v4 schema says "at least one of {…} must be
+        #    set" without specifying which, so we must accept any subset.
+        sparse = by_date[datetime.date(2026, 5, 16)]
+        assert sparse.entropy == pytest.approx(2.9)
+        assert sparse.avg_hrv_ms is None
+        assert sparse.deep_sleep_rmssd_ms is None
+        assert sparse.non_rem_hr_bpm is None
+
+
 async def test_list_sleep_sessions(http):
     with respx.mock(base_url="https://health.googleapis.com") as mock:
         mock.get(url__regex=r".*/sleep/dataPoints.*").mock(

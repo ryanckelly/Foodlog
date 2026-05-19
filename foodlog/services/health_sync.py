@@ -19,6 +19,7 @@ from foodlog.clients.google_health import GoogleHealthClient, RateLimited, Googl
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
+    DailyHrv,
     IntervalActivity,
     IntervalAzm,
     IntervalHeartRate,
@@ -100,6 +101,7 @@ class HealthSyncService:
         await _run("daily_activity", self._sync_daily_activity)
         await _run("body_composition", self._sync_body_composition)
         await _run("resting_heart_rate", self._sync_resting_hr)
+        await _run("daily_hrv", self._sync_daily_hrv)
         await _run("sleep_sessions", self._sync_sleep, brittle=True)
         await _run("interval_heart_rate", self._sync_interval_heart_rate)
         await _run("interval_activity", self._sync_interval_activity)
@@ -198,6 +200,36 @@ class HealthSyncService:
             stmt = stmt.on_conflict_do_update(
                 index_elements=["external_id"],
                 set_=dict(measured_at=row.measured_at, bpm=row.bpm, source=row.source),
+            )
+            self._db.execute(stmt)
+        self._db.commit()
+        return len(rows)
+
+    async def _sync_daily_hrv(self) -> int:
+        # daily-heart-rate-variability is list+reconcile only (no rollup).
+        # Cursor on the date PK; on empty table, default 90-day backfill.
+        cursor_date = self._db.execute(
+            select(func.max(DailyHrv.date))
+        ).scalar_one_or_none()
+        if cursor_date is None:
+            since = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(days=DEFAULT_BACKFILL_DAYS)
+        else:
+            since = datetime.datetime.combine(cursor_date, datetime.time.min)
+        rows = [r async for r in self._client.list_daily_hrv(since=since)]
+        for row in rows:
+            values = dict(
+                date=row.date,
+                avg_hrv_ms=row.avg_hrv_ms,
+                deep_sleep_rmssd_ms=row.deep_sleep_rmssd_ms,
+                non_rem_hr_bpm=row.non_rem_hr_bpm,
+                entropy=row.entropy,
+                source=row.source,
+                external_id=row.external_id,
+            )
+            stmt = sqlite_insert(DailyHrv).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["date"],
+                set_={k: v for k, v in values.items() if k != "date"},
             )
             self._db.execute(stmt)
         self._db.commit()

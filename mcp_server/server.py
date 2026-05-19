@@ -19,6 +19,7 @@ from foodlog.config import settings
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
+    DailyHrv,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -44,6 +45,7 @@ TOOL_REQUIRED_SCOPES = {
     "get_resting_heart_rate": ["foodlog.read"],
     "get_workouts": ["foodlog.read"],
     "get_body_weight": ["foodlog.read"],
+    "get_daily_hrv": ["foodlog.read"],
 }
 
 MAX_RANGE_DAYS = 90
@@ -143,10 +145,11 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             "then log_food to record meals. Use get_daily_summary to show totals. "
             "Always search before logging to get accurate nutrition values. "
             "Synced health data is also available read-only: get_daily_activity "
-            "(steps + active calories), get_sleep (sleep sessions), "
-            "get_resting_heart_rate (daily resting HR), get_workouts "
-            "(workouts with optional HR samples), and get_body_weight "
-            "(body weight readings in kg)."
+            "(steps + active calories), get_sleep (sleep sessions with stage "
+            "breakdown when available), get_resting_heart_rate (daily resting "
+            "HR), get_daily_hrv (overnight HRV stats), get_workouts (workouts "
+            "with optional HR samples), and get_body_weight (body weight "
+            "readings in kg)."
         ),
         streamable_http_path="/mcp",
         auth=auth_settings,
@@ -405,6 +408,50 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                     {
                         "measured_at": r.measured_at.isoformat(),
                         "bpm": r.bpm,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
+
+    @mcp.tool()
+    def get_daily_hrv(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> dict:
+        """Get overnight heart rate variability stats for a date range.
+
+        Each item is one civil date with up to four metric fields populated
+        from the Pixel Watch's daily-heart-rate-variability stream:
+        - avg_hrv_ms: average HRV (RMSSD method) across the night, milliseconds
+        - deep_sleep_rmssd_ms: RMSSD during deep sleep specifically
+        - non_rem_hr_bpm: non-REM heart rate, beats per minute
+        - entropy: Shannon entropy of heartbeat intervals (~2.8-3.4 typical)
+
+        Defaults to the last 7 days. Any individual metric may be None on a
+        given night when Google didn't compute it.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=7)
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(DailyHrv)
+                .filter(DailyHrv.date >= start, DailyHrv.date <= end)
+                .order_by(DailyHrv.date.asc())
+                .all()
+            )
+            return {
+                "items": [
+                    {
+                        "date": r.date.isoformat(),
+                        "avg_hrv_ms": r.avg_hrv_ms,
+                        "deep_sleep_rmssd_ms": r.deep_sleep_rmssd_ms,
+                        "non_rem_hr_bpm": r.non_rem_hr_bpm,
+                        "entropy": r.entropy,
                         "source": r.source,
                     }
                     for r in rows

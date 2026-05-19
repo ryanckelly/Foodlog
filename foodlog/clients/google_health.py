@@ -42,6 +42,7 @@ DATA_TYPES = {
     "heart_rate_sample": "heart-rate",
     "sleep_session": "sleep",
     "workout": "exercise",
+    "daily_hrv": "daily-heart-rate-variability",
 }
 
 # Per-endpoint filter grammar for the `list` action. Each entry:
@@ -59,6 +60,7 @@ FILTER_FIELDS: dict[str, tuple[str, str]] = {
     "weight":                   ("weight.sample_time.civil_time",                 "civil"),
     "body-fat":                 ("body_fat.sample_time.civil_time",               "civil"),
     "daily-resting-heart-rate": ("daily_resting_heart_rate.date",                 "date"),
+    "daily-heart-rate-variability": ("daily_heart_rate_variability.date",         "date"),
     "heart-rate":               ("heart_rate.sample_time.physical_time",          "rfc3339"),
     # Sleep's only valid filter member is civil_end_time (Google rejects
     # civil_start_time with INVALID_DATA_POINT_FILTER_DATA_TYPE_MEMBER). The
@@ -112,6 +114,23 @@ class RestingHeartRateRow:
     external_id: str
     measured_at: datetime.datetime
     bpm: int
+    source: str
+
+
+@dataclass(slots=True)
+class DailyHrvRow:
+    """One row per civil date from daily-heart-rate-variability.
+
+    All numeric fields nullable because the v4 schema declares at least one
+    of {avg_hrv_ms, deep_sleep_rmssd_ms, non_rem_hr_bpm, entropy} must be
+    set, but not which — so any individual field can be None on a given night.
+    """
+    external_id: str
+    date: datetime.date
+    avg_hrv_ms: float | None
+    deep_sleep_rmssd_ms: float | None
+    non_rem_hr_bpm: int | None
+    entropy: float | None
     source: str
 
 
@@ -508,6 +527,46 @@ class GoogleHealthClient:
                 external_id=name,
                 measured_at=measured_at,
                 bpm=bpm_i,
+                source=_source_from(pt.get("dataSource")),
+            )
+
+    async def list_daily_hrv(
+        self, since: datetime.datetime, until: datetime.datetime | None = None,
+    ) -> AsyncIterator[DailyHrvRow]:
+        # v4 shape: pt["dailyHeartRateVariability"] = {
+        #   "date": {"year","month","day"},
+        #   "averageHeartRateVariabilityMilliseconds": 48.3,
+        #   "nonRemHeartRateBeatsPerMinute": "56",   # string<int64>
+        #   "entropy": 3.14,
+        #   "deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds": 47.0,
+        # }
+        # Action set is list+reconcile only — no rollup. See
+        # google-health-v4-quirks memory.
+        async for pt in self._paginate(DATA_TYPES["daily_hrv"], since, until):
+            inner = pt.get("dailyHeartRateVariability") or {}
+            date_obj = inner.get("date") or {}
+            if not date_obj:
+                logger.warning("google-health daily-hrv point missing date: %r", pt)
+                continue
+            try:
+                d = _parse_civil_date(date_obj)
+            except (KeyError, ValueError, TypeError):
+                logger.warning("google-health daily-hrv date malformed: %r", pt)
+                continue
+            avg_hrv = inner.get("averageHeartRateVariabilityMilliseconds")
+            deep_rmssd = inner.get("deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds")
+            entropy = inner.get("entropy")
+            non_rem_hr = _parse_int_string(inner.get("nonRemHeartRateBeatsPerMinute"))
+            name = pt.get("name") or _synth_id(
+                "daily-hrv", _source_from(pt.get("dataSource")), d.isoformat(),
+            )
+            yield DailyHrvRow(
+                external_id=name,
+                date=d,
+                avg_hrv_ms=float(avg_hrv) if avg_hrv is not None else None,
+                deep_sleep_rmssd_ms=float(deep_rmssd) if deep_rmssd is not None else None,
+                non_rem_hr_bpm=non_rem_hr,
+                entropy=float(entropy) if entropy is not None else None,
                 source=_source_from(pt.get("dataSource")),
             )
 

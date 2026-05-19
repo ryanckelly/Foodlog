@@ -191,6 +191,28 @@ class RestingHeartRate(Base):
     )
 
 
+class DailyHrv(Base):
+    """One row per civil date — overnight HRV stats from Pixel Watch.
+
+    All four metric fields are nullable because Google may emit only a subset
+    on a given night. The avg_hrv_ms and deep_sleep_rmssd_ms fields are the
+    primary signals the body-sim 'unusual day' detector consumes; non_rem_hr
+    and entropy are stored for completeness.
+    """
+    __tablename__ = "daily_hrv"
+
+    date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    avg_hrv_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deep_sleep_rmssd_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    non_rem_hr_bpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    entropy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
 class SleepSession(Base):
     __tablename__ = "sleep_sessions"
 

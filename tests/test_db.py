@@ -98,7 +98,7 @@ def test_get_engine_configures_driver_qualified_sqlite_url(monkeypatch, tmp_path
 
 
 def test_google_health_tables_created(db_session):
-    """All seven new Google Health tables exist after create_all."""
+    """All required Google Health tables exist after create_all."""
     from sqlalchemy import inspect
     insp = inspect(db_session.get_bind())
     tables = set(insp.get_table_names())
@@ -110,6 +110,7 @@ def test_google_health_tables_created(db_session):
         "sleep_sessions",
         "workouts",
         "workout_hr_samples",
+        "daily_hrv",
     }
     missing = required - tables
     assert not missing, f"missing tables: {missing}"

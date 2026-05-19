@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
+    DailyHrv,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -219,6 +220,48 @@ def test_get_sleep_returns_stage_breakdown_when_present(db_session):
     assert legacy["sleep_type"] is None
     assert legacy["nap"] is None
     assert legacy["deep_min"] is None
+
+
+def test_get_daily_hrv_returns_metrics_for_range(db_session):
+    """get_daily_hrv exposes all four metric fields, ordered by date asc,
+    filtered to the requested civil-date window."""
+    db_session.add_all([
+        DailyHrv(
+            date=datetime.date(2026, 5, 10),
+            avg_hrv_ms=48.0,
+            deep_sleep_rmssd_ms=47.0,
+            non_rem_hr_bpm=56,
+            entropy=3.14,
+            source="Pixel Watch 3",
+            external_id="d1",
+        ),
+        DailyHrv(
+            date=datetime.date(2026, 5, 11),
+            avg_hrv_ms=None,   # sparse — only entropy
+            deep_sleep_rmssd_ms=None,
+            non_rem_hr_bpm=None,
+            entropy=2.9,
+            source="Pixel Watch 3",
+            external_id="d2",
+        ),
+        DailyHrv(
+            date=datetime.date(2026, 5, 20),  # out of requested range
+            avg_hrv_ms=50.0,
+            source="watch",
+            external_id="d3",
+        ),
+    ])
+    db_session.commit()
+
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_daily_hrv")
+    result = fn(start_date="2026-05-10", end_date="2026-05-11")
+    items = result["items"]
+    assert [r["date"] for r in items] == ["2026-05-10", "2026-05-11"]
+    assert items[0]["avg_hrv_ms"] == pytest.approx(48.0)
+    assert items[0]["non_rem_hr_bpm"] == 56
+    assert items[1]["entropy"] == pytest.approx(2.9)
+    assert items[1]["avg_hrv_ms"] is None
 
 
 def test_get_resting_heart_rate_returns_in_range(db_session):

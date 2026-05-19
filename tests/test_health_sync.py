@@ -6,6 +6,7 @@ import pytest
 from foodlog.clients.google_health import (
     BodyCompositionRow,
     DailyActivityRow,
+    DailyHrvRow,
     RestingHeartRateRow,
     SleepSessionRow,
     WorkoutRow,
@@ -14,6 +15,7 @@ from foodlog.clients.google_health import (
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
+    DailyHrv,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -49,6 +51,7 @@ def client():
         )
     ])
     c.list_resting_heart_rate = lambda *a, **kw: _collect([])
+    c.list_daily_hrv = lambda *a, **kw: _collect([])
     c.list_sleep_sessions = lambda *a, **kw: _collect([])
     c.list_workouts = lambda *a, **kw: _collect([
         WorkoutRow(
@@ -193,6 +196,99 @@ async def test_sync_interval_activity_upserts_with_nullable_columns(db_session):
 
 
 @pytest.mark.asyncio
+async def test_sync_daily_hrv_persists_metrics(db_session):
+    """daily-hrv sync: writes every populated field; absent fields stay None."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    full = DailyHrvRow(
+        external_id="daily-hrv|Pixel Watch 3|2026-05-18",
+        date=datetime.date(2026, 5, 18),
+        avg_hrv_ms=64.7,
+        deep_sleep_rmssd_ms=56.25,
+        non_rem_hr_bpm=54,
+        entropy=3.142,
+        source="Pixel Watch 3",
+    )
+    sparse = DailyHrvRow(
+        external_id="daily-hrv|Pixel Watch 3|2026-05-16",
+        date=datetime.date(2026, 5, 16),
+        avg_hrv_ms=None, deep_sleep_rmssd_ms=None, non_rem_hr_bpm=None,
+        entropy=2.9,
+        source="Pixel Watch 3",
+    )
+
+    class StubClient:
+        async def list_daily_hrv(self, since, until=None):
+            yield full
+            yield sparse
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_daily_hrv()
+    assert n == 2
+    rows = {r.date: r for r in db_session.query(DailyHrv).all()}
+    assert rows[datetime.date(2026, 5, 18)].avg_hrv_ms == pytest.approx(64.7)
+    assert rows[datetime.date(2026, 5, 18)].non_rem_hr_bpm == 54
+    assert rows[datetime.date(2026, 5, 16)].entropy == pytest.approx(2.9)
+    assert rows[datetime.date(2026, 5, 16)].avg_hrv_ms is None
+
+
+@pytest.mark.asyncio
+async def test_sync_daily_hrv_upserts_on_date_conflict(db_session):
+    """Re-syncing the same date with revised metrics overwrites prior values."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    initial = DailyHrvRow(
+        external_id="x", date=datetime.date(2026, 5, 10),
+        avg_hrv_ms=40.0, deep_sleep_rmssd_ms=38.0,
+        non_rem_hr_bpm=60, entropy=3.0, source="watch",
+    )
+    revised = DailyHrvRow(
+        external_id="x", date=datetime.date(2026, 5, 10),
+        avg_hrv_ms=45.0, deep_sleep_rmssd_ms=42.0,
+        non_rem_hr_bpm=58, entropy=3.1, source="watch",
+    )
+
+    class StubClient:
+        def __init__(self, rows): self._rows = rows
+        async def list_daily_hrv(self, since, until=None):
+            for r in self._rows: yield r
+
+    svc = HealthSyncService(db_session, StubClient([initial]))
+    await svc._sync_daily_hrv()
+    svc._client = StubClient([revised])
+    await svc._sync_daily_hrv()
+    row = db_session.query(DailyHrv).one()
+    assert row.avg_hrv_ms == pytest.approx(45.0)
+    assert row.non_rem_hr_bpm == 58
+
+
+@pytest.mark.asyncio
+async def test_sync_daily_hrv_cursor_starts_from_max_date(db_session):
+    """On a populated table, _sync_daily_hrv asks the client for `since` equal
+    to the latest stored date — not the 90-day default — so we don't re-pull
+    the full backfill every cycle."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    db_session.add(DailyHrv(
+        date=datetime.date(2026, 5, 10),
+        avg_hrv_ms=42.0, source="watch", external_id="seed",
+    ))
+    db_session.commit()
+
+    seen_since: list[datetime.datetime] = []
+
+    class StubClient:
+        async def list_daily_hrv(self, since, until=None):
+            seen_since.append(since)
+            return
+            yield  # make this an async generator
+
+    sync = HealthSyncService(db_session, StubClient())
+    await sync._sync_daily_hrv()
+    assert seen_since == [datetime.datetime(2026, 5, 10, 0, 0)]
+
+
+@pytest.mark.asyncio
 async def test_sync_sleep_persists_stage_breakdown(db_session):
     """STAGES session writes per-stage minute totals + metadata into the
     extended sleep_sessions columns; CLASSIC session leaves stage fields
@@ -328,6 +424,8 @@ async def test_sync_all_includes_interval_metrics(db_session):
         async def list_body_composition(self, since, until=None):
             return; yield
         async def list_resting_heart_rate(self, since, until=None):
+            return; yield
+        async def list_daily_hrv(self, since, until=None):
             return; yield
         async def list_sleep_sessions(self, since, until=None):
             return; yield

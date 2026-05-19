@@ -1,0 +1,37 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/daily-heart-rate-variability/dataPoints/2026-05-18",
+      "dataSource": {
+        "recordingMethod": "DERIVED",
+        "device": {"displayName": "Pixel Watch 3"},
+        "platform": "FITBIT"
+      },
+      "dailyHeartRateVariability": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "averageHeartRateVariabilityMilliseconds": 64.7,
+        "nonRemHeartRateBeatsPerMinute": "54",
+        "entropy": 3.142,
+        "deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds": 56.25
+      }
+    },
+    {
+      "name": "users/me/dataTypes/daily-heart-rate-variability/dataPoints/2026-05-17",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyHeartRateVariability": {
+        "date": {"year": 2026, "month": 5, "day": 17},
+        "averageHeartRateVariabilityMilliseconds": 48.0,
+        "deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds": 47.0
+      }
+    },
+    {
+      "name": "users/me/dataTypes/daily-heart-rate-variability/dataPoints/2026-05-16",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailyHeartRateVariability": {
+        "date": {"year": 2026, "month": 5, "day": 16},
+        "entropy": 2.9
+      }
+    }
+  ],
+  "nextPageToken": ""
+}
