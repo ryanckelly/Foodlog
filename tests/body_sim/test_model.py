@@ -14,9 +14,12 @@ def initial_state():
 
 
 @pytest.fixture
-def maintenance_inputs():
-    # Roughly maintenance for an 80kg, 40yr male:
-    # RMR ~ 1700, activity ~ 600, TEF ~ 200 → ~2500 kcal
+def default_inputs():
+    """A reasonable set of daily inputs for tests that need a baseline.
+
+    Not calibrated to exact maintenance — tests that care about energy balance
+    set their own inputs.
+    """
     return {
         "intake_kcal": 2500.0,
         "protein_g": 120.0,
@@ -37,10 +40,10 @@ def test_state_predicted_weight_includes_water(initial_state):
     assert predicted == pytest.approx(20 + 60 + 1.4, abs=0.05)
 
 
-def test_one_day_step_returns_new_state(initial_state, maintenance_inputs):
+def test_one_day_step_returns_new_state(initial_state, default_inputs):
     new_state, diagnostics = model.step(
         state=initial_state,
-        inputs=maintenance_inputs,
+        inputs=default_inputs,
         profile=DEFAULT_PROFILE,
         parameters=DEFAULT_PARAMETERS,
     )
@@ -94,11 +97,11 @@ def test_deficit_decreases_total_mass(initial_state):
     assert new_mass < initial_mass
 
 
-def test_intake_bias_applied(initial_state, maintenance_inputs):
+def test_intake_bias_applied(initial_state, default_inputs):
     # intake_bias < 1 means we trust the log less (assume actually ate more)
     params = {**DEFAULT_PARAMETERS, "intake_bias": 0.7}
     new_state, diag = model.step(
-        state=initial_state, inputs=maintenance_inputs, profile=DEFAULT_PROFILE, parameters=params
+        state=initial_state, inputs=default_inputs, profile=DEFAULT_PROFILE, parameters=params
     )
     # intake_bias=0.7 with intake=2500 effectively means model assumes true intake is 2500/0.7 = ~3571
     # That's a surplus; mass should grow
@@ -125,3 +128,35 @@ def test_activity_fallback_when_hr_coverage_low(initial_state):
     )
     assert diag["activity_source"] == "fallback"
     assert diag["activity_kcal"] > 0
+
+
+def test_step_skips_on_nan_intake(initial_state, default_inputs):
+    """Missing food-log days return state unchanged, not a corrupted state."""
+    import math
+    bad_inputs = {**default_inputs, "intake_kcal": float("nan")}
+    new_state, diag = model.step(
+        state=initial_state,
+        inputs=bad_inputs,
+        profile=DEFAULT_PROFILE,
+        parameters=DEFAULT_PARAMETERS,
+    )
+    # State unchanged
+    assert new_state is initial_state or (
+        new_state.fat_mass_kg == initial_state.fat_mass_kg
+        and new_state.lean_mass_kg == initial_state.lean_mass_kg
+        and new_state.glycogen_g == initial_state.glycogen_g
+    )
+    # Diagnostic marker present
+    assert diag.get("skipped") is True
+
+
+def test_step_rejects_zero_intake_bias(initial_state, default_inputs):
+    """intake_bias=0 is a degenerate parameter; raise rather than divide by zero."""
+    bad_params = {**DEFAULT_PARAMETERS, "intake_bias": 0.0}
+    with pytest.raises(ValueError, match="intake_bias"):
+        model.step(
+            state=initial_state,
+            inputs=default_inputs,
+            profile=DEFAULT_PROFILE,
+            parameters=bad_params,
+        )

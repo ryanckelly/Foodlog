@@ -7,6 +7,7 @@ This is the kernel of the simulator. Both forward simulation and validation
 call `step()` repeatedly with daily inputs.
 """
 
+import math
 from dataclasses import dataclass, field
 
 from body_sim import adaptation, glycogen, partition, rmr, sodium, tef
@@ -43,10 +44,13 @@ class BodyState:
             + sodium.water_kg(sodium_mg)
         )
 
+    @property
     def body_fat_pct(self) -> float:
         return 100.0 * self.fat_mass_kg / max(0.001, self.total_mass_kg)
 
 
+# Note: `vigorous_min` is part of the input schema but not consumed at Phase 1.
+# Reserved for future MET-based intensity weighting (Phase 3+).
 def _activity_kcal(inputs: dict, parameters: dict) -> tuple[float, str]:
     """Pick HR-Keytel when coverage is high; fall back to workout + steps."""
     hr_coverage = inputs.get("hr_coverage_pct", 0.0)
@@ -79,8 +83,21 @@ def step(
     if parameters is None:
         parameters = DEFAULT_PARAMETERS
 
+    # Skip-and-return-unchanged for missing-intake days. The daily-rollup
+    # pipeline produces NaN intake when meal coverage is insufficient; that
+    # day's state should not be advanced. Validation harness handles missing
+    # observation days separately.
+    intake_kcal = inputs.get("intake_kcal")
+    if intake_kcal is None or not math.isfinite(intake_kcal):
+        return state, {"skipped": True, "reason": "non-finite intake_kcal"}
+
+    if parameters["intake_bias"] <= 0:
+        raise ValueError(
+            f"intake_bias must be positive, got {parameters['intake_bias']}"
+        )
+
     # --- Effective intake: correct for systematic under-reporting ---
-    effective_intake = inputs["intake_kcal"] / parameters["intake_bias"]
+    effective_intake = intake_kcal / parameters["intake_bias"]
 
     # --- Expenditure components ---
     rmr_kcal = rmr.mifflin_st_jeor(
