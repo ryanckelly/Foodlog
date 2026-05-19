@@ -16,7 +16,16 @@ import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from foodlog.db.models import DailyActivity, FoodEntry, IntervalAzm, IntervalHeartRate
+from foodlog.db.models import (
+    BodyComposition,
+    DailyActivity,
+    FoodEntry,
+    IntervalAzm,
+    IntervalHeartRate,
+    RestingHeartRate,
+    SleepSession,
+    Workout,
+)
 
 from body_sim import keytel
 
@@ -238,3 +247,164 @@ def _empty_activity_row() -> dict:
         "vigorous_min": 0,
         "cardio_min": 0,
     }
+
+
+def rollup_body_comp(
+    session: Session, start: datetime.date, end: datetime.date
+) -> pd.DataFrame:
+    """Aggregate body_composition to one row per day.
+
+    Columns: weight_kg (median), bf_pct (median), n_weighins.
+
+    Multiple readings on the same day are reduced to the median for both
+    weight and body-fat percentage. Days with no readings return NaN for
+    weight_kg and bf_pct and 0 for n_weighins.
+    """
+    rows = (
+        session.query(BodyComposition)
+        .filter(
+            BodyComposition.measured_at >= datetime.datetime.combine(start, datetime.time()),
+            BodyComposition.measured_at < datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time()
+            ),
+        )
+        .all()
+    )
+    per_day: dict[datetime.date, list[BodyComposition]] = {}
+    for r in rows:
+        per_day.setdefault(r.measured_at.date(), []).append(r)
+
+    idx = _date_index(start, end)
+    records = []
+    for ts in idx:
+        d = ts.date()
+        rs = per_day.get(d, [])
+        if rs:
+            weights = [r.weight_kg for r in rs if r.weight_kg is not None]
+            bfs = [r.body_fat_pct for r in rs if r.body_fat_pct is not None]
+            records.append(
+                {
+                    "weight_kg": float(np.median(weights)) if weights else np.nan,
+                    "bf_pct": float(np.median(bfs)) if bfs else np.nan,
+                    "n_weighins": len(rs),
+                }
+            )
+        else:
+            records.append({"weight_kg": np.nan, "bf_pct": np.nan, "n_weighins": 0})
+    return pd.DataFrame(records, index=idx)
+
+
+def rollup_rhr(
+    session: Session, start: datetime.date, end: datetime.date, ffill_days: int = 3
+) -> pd.DataFrame:
+    """Aggregate resting_heart_rate to one row per day with limited forward-fill.
+
+    Columns: rhr_bpm.
+
+    A measurement on day D fills D and up to ffill_days subsequent days that
+    have no reading of their own. Days more than ffill_days beyond the last
+    reading return NaN.  A small look-back window before `start` is fetched so
+    the first days of the range can benefit from forward-fill too.
+    """
+    fetch_start = start - datetime.timedelta(days=ffill_days)
+    rows = (
+        session.query(RestingHeartRate)
+        .filter(
+            RestingHeartRate.measured_at >= datetime.datetime.combine(fetch_start, datetime.time()),
+            RestingHeartRate.measured_at < datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time()
+            ),
+        )
+        .order_by(RestingHeartRate.measured_at)
+        .all()
+    )
+    # Most-recent reading per calendar date (last write wins).
+    by_date: dict[datetime.date, int] = {}
+    for r in rows:
+        by_date[r.measured_at.date()] = r.bpm
+
+    idx = _date_index(start, end)
+    records = []
+    for ts in idx:
+        d = ts.date()
+        value = np.nan
+        for back in range(ffill_days + 1):
+            cand = d - datetime.timedelta(days=back)
+            if cand in by_date:
+                value = float(by_date[cand])
+                break
+        records.append({"rhr_bpm": value})
+    return pd.DataFrame(records, index=idx)
+
+
+def rollup_sleep(
+    session: Session, start: datetime.date, end: datetime.date
+) -> pd.DataFrame:
+    """Aggregate sleep_sessions to one row per day (previous-night convention).
+
+    Columns: sleep_total_h_prev_night.
+
+    A sleep session ending before noon on day D is counted as the previous
+    night's sleep for day D (i.e. it appears in row D).  Sessions ending at
+    noon or later (naps / unusual daytime sleep) are excluded.  Duration is
+    taken directly from duration_min to match what the sync stores rather than
+    recomputing from start/end timestamps.
+    """
+    fetch_start = start - datetime.timedelta(days=1)
+    rows = (
+        session.query(SleepSession)
+        .filter(
+            SleepSession.end_at >= datetime.datetime.combine(fetch_start, datetime.time()),
+            SleepSession.end_at < datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time(12, 0)
+            ),
+        )
+        .all()
+    )
+    per_day: dict[datetime.date, float] = {}
+    for r in rows:
+        end_dt = r.end_at
+        if end_dt.hour < 12:
+            d = end_dt.date()
+        else:
+            continue  # naps / late-day sleep; not 'prev night'
+        per_day[d] = per_day.get(d, 0.0) + r.duration_min / 60.0
+
+    idx = _date_index(start, end)
+    records = [
+        {"sleep_total_h_prev_night": per_day.get(ts.date(), np.nan)} for ts in idx
+    ]
+    return pd.DataFrame(records, index=idx)
+
+
+def rollup_workouts(
+    session: Session, start: datetime.date, end: datetime.date
+) -> pd.DataFrame:
+    """Aggregate workouts to one row per day.
+
+    Columns: workout_kcal (sum), workout_min (sum).
+
+    Days with no workouts return 0 for both columns (not NaN) so downstream
+    math can use the column without masking.
+    """
+    rows = (
+        session.query(Workout)
+        .filter(
+            Workout.start_at >= datetime.datetime.combine(start, datetime.time()),
+            Workout.start_at < datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time()
+            ),
+        )
+        .all()
+    )
+    per_day: dict[datetime.date, dict] = {}
+    for r in rows:
+        cell = per_day.setdefault(r.start_at.date(), {"workout_kcal": 0.0, "workout_min": 0})
+        cell["workout_kcal"] += r.calories_kcal or 0
+        cell["workout_min"] += r.duration_min or 0
+
+    idx = _date_index(start, end)
+    records = [
+        per_day.get(ts.date(), {"workout_kcal": 0.0, "workout_min": 0}) for ts in idx
+    ]
+    return pd.DataFrame(records, index=idx)
