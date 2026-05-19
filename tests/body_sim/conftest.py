@@ -5,7 +5,7 @@ the pattern in tests/conftest.py for the main foodlog app.
 """
 
 import datetime
-from collections.abc import Iterator
+from collections.abc import Generator
 
 import pytest
 from sqlalchemy import create_engine
@@ -16,7 +16,7 @@ from foodlog.db.models import Base
 
 
 @pytest.fixture
-def session() -> Iterator[Session]:
+def session() -> Generator[Session, None, None]:
     """In-memory SQLite session with the full foodlog schema."""
     engine = create_engine(
         "sqlite://",
