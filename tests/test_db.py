@@ -111,6 +111,7 @@ def test_google_health_tables_created(db_session):
         "workouts",
         "workout_hr_samples",
         "daily_hrv",
+        "daily_sleep_temperature",
     }
     missing = required - tables
     assert not missing, f"missing tables: {missing}"

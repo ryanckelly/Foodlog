@@ -1,0 +1,29 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/daily-sleep-temperature-derivations/dataPoints/2026-05-18",
+      "dataSource": {
+        "recordingMethod": "DERIVED",
+        "device": {"displayName": "Pixel Watch 3"},
+        "platform": "FITBIT"
+      },
+      "dailySleepTemperatureDerivations": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "nightlyTemperatureCelsius": 33.94,
+        "baselineTemperatureCelsius": 32.84,
+        "relativeNightlyStddev30dCelsius": 0.857
+      }
+    },
+    {
+      "name": "users/me/dataTypes/daily-sleep-temperature-derivations/dataPoints/2026-05-17",
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "dailySleepTemperatureDerivations": {
+        "date": {"year": 2026, "month": 5, "day": 17},
+        "nightlyTemperatureCelsius": 32.80,
+        "baselineTemperatureCelsius": 32.84,
+        "relativeNightlyStddev30dCelsius": 0.087
+      }
+    }
+  ],
+  "nextPageToken": ""
+}

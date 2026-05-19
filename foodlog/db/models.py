@@ -213,6 +213,27 @@ class DailyHrv(Base):
     )
 
 
+class DailySleepTemperature(Base):
+    """One row per civil date — nightly skin-temperature deltas from Pixel Watch.
+
+    relative_stddev_30d_c is the headline signal: Google ships a pre-computed
+    "how unusual is tonight vs. the user's own 30-day baseline." That makes
+    this table the primary illness/alcohol flag for the body-sim. Skin temp
+    typically rises 2-3 days before symptom onset and 0.3-0.8 C with alcohol.
+    """
+    __tablename__ = "daily_sleep_temperature"
+
+    date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    nightly_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relative_stddev_30d_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
 class SleepSession(Base):
     __tablename__ = "sleep_sessions"
 

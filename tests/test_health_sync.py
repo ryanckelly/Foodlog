@@ -7,6 +7,7 @@ from foodlog.clients.google_health import (
     BodyCompositionRow,
     DailyActivityRow,
     DailyHrvRow,
+    DailySleepTemperatureRow,
     RestingHeartRateRow,
     SleepSessionRow,
     WorkoutRow,
@@ -16,6 +17,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailySleepTemperature,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -52,6 +54,7 @@ def client():
     ])
     c.list_resting_heart_rate = lambda *a, **kw: _collect([])
     c.list_daily_hrv = lambda *a, **kw: _collect([])
+    c.list_daily_sleep_temperature = lambda *a, **kw: _collect([])
     c.list_sleep_sessions = lambda *a, **kw: _collect([])
     c.list_workouts = lambda *a, **kw: _collect([
         WorkoutRow(
@@ -289,6 +292,42 @@ async def test_sync_daily_hrv_cursor_starts_from_max_date(db_session):
 
 
 @pytest.mark.asyncio
+async def test_sync_daily_sleep_temperature_persists_metrics(db_session):
+    """daily-sleep-temperature-derivations sync writes all three temp fields."""
+    from foodlog.services.health_sync import HealthSyncService
+
+    rows_in = [
+        DailySleepTemperatureRow(
+            external_id="x1",
+            date=datetime.date(2026, 5, 18),
+            nightly_temp_c=33.94,
+            baseline_temp_c=32.84,
+            relative_stddev_30d_c=0.857,
+            source="Pixel Watch 3",
+        ),
+        DailySleepTemperatureRow(
+            external_id="x2",
+            date=datetime.date(2026, 5, 17),
+            nightly_temp_c=32.80, baseline_temp_c=32.84,
+            relative_stddev_30d_c=0.087, source="Pixel Watch 3",
+        ),
+    ]
+
+    class StubClient:
+        async def list_daily_sleep_temperature(self, since, until=None):
+            for r in rows_in: yield r
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_daily_sleep_temperature()
+    assert n == 2
+    by_date = {r.date: r for r in db_session.query(DailySleepTemperature).all()}
+    unusual = by_date[datetime.date(2026, 5, 18)]
+    assert unusual.nightly_temp_c == pytest.approx(33.94)
+    assert unusual.baseline_temp_c == pytest.approx(32.84)
+    assert unusual.relative_stddev_30d_c == pytest.approx(0.857)
+
+
+@pytest.mark.asyncio
 async def test_sync_sleep_persists_stage_breakdown(db_session):
     """STAGES session writes per-stage minute totals + metadata into the
     extended sleep_sessions columns; CLASSIC session leaves stage fields
@@ -426,6 +465,8 @@ async def test_sync_all_includes_interval_metrics(db_session):
         async def list_resting_heart_rate(self, since, until=None):
             return; yield
         async def list_daily_hrv(self, since, until=None):
+            return; yield
+        async def list_daily_sleep_temperature(self, since, until=None):
             return; yield
         async def list_sleep_sessions(self, since, until=None):
             return; yield

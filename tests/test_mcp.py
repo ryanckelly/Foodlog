@@ -8,6 +8,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailySleepTemperature,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -262,6 +263,38 @@ def test_get_daily_hrv_returns_metrics_for_range(db_session):
     assert items[0]["non_rem_hr_bpm"] == 56
     assert items[1]["entropy"] == pytest.approx(2.9)
     assert items[1]["avg_hrv_ms"] is None
+
+
+def test_get_daily_sleep_temperature_returns_in_range(db_session):
+    """get_daily_sleep_temperature returns the three temp fields in
+    date-ascending order, filtered to the requested window."""
+    db_session.add_all([
+        DailySleepTemperature(
+            date=datetime.date(2026, 5, 18),
+            nightly_temp_c=33.94,
+            baseline_temp_c=32.84,
+            relative_stddev_30d_c=0.857,
+            source="Pixel Watch 3",
+            external_id="t1",
+        ),
+        DailySleepTemperature(
+            date=datetime.date(2026, 5, 17),
+            nightly_temp_c=32.80, baseline_temp_c=32.84,
+            relative_stddev_30d_c=0.087, source="Pixel Watch 3",
+            external_id="t2",
+        ),
+        DailySleepTemperature(
+            date=datetime.date(2026, 5, 25),  # out of range
+            nightly_temp_c=33.0, source="Pixel Watch 3", external_id="t3",
+        ),
+    ])
+    db_session.commit()
+    mcp = create_mcp_server()
+    fn = _get_tool(mcp, "get_daily_sleep_temperature")
+    result = fn(start_date="2026-05-17", end_date="2026-05-18")
+    items = result["items"]
+    assert [r["date"] for r in items] == ["2026-05-17", "2026-05-18"]
+    assert items[1]["relative_stddev_30d_c"] == pytest.approx(0.857)
 
 
 def test_get_resting_heart_rate_returns_in_range(db_session):

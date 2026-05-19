@@ -43,6 +43,7 @@ DATA_TYPES = {
     "sleep_session": "sleep",
     "workout": "exercise",
     "daily_hrv": "daily-heart-rate-variability",
+    "daily_sleep_temperature": "daily-sleep-temperature-derivations",
 }
 
 # Per-endpoint filter grammar for the `list` action. Each entry:
@@ -61,6 +62,7 @@ FILTER_FIELDS: dict[str, tuple[str, str]] = {
     "body-fat":                 ("body_fat.sample_time.civil_time",               "civil"),
     "daily-resting-heart-rate": ("daily_resting_heart_rate.date",                 "date"),
     "daily-heart-rate-variability": ("daily_heart_rate_variability.date",         "date"),
+    "daily-sleep-temperature-derivations": ("daily_sleep_temperature_derivations.date", "date"),
     "heart-rate":               ("heart_rate.sample_time.physical_time",          "rfc3339"),
     # Sleep's only valid filter member is civil_end_time (Google rejects
     # civil_start_time with INVALID_DATA_POINT_FILTER_DATA_TYPE_MEMBER). The
@@ -131,6 +133,22 @@ class DailyHrvRow:
     deep_sleep_rmssd_ms: float | None
     non_rem_hr_bpm: int | None
     entropy: float | None
+    source: str
+
+
+@dataclass(slots=True)
+class DailySleepTemperatureRow:
+    """One row per civil date from daily-sleep-temperature-derivations.
+
+    relative_stddev_30d_c is the headline body-sim signal — Google ships a
+    pre-computed "how unusual is tonight vs. the user's own 30-day baseline"
+    so we don't have to re-implement rolling-baseline math.
+    """
+    external_id: str
+    date: datetime.date
+    nightly_temp_c: float | None
+    baseline_temp_c: float | None
+    relative_stddev_30d_c: float | None
     source: str
 
 
@@ -567,6 +585,42 @@ class GoogleHealthClient:
                 deep_sleep_rmssd_ms=float(deep_rmssd) if deep_rmssd is not None else None,
                 non_rem_hr_bpm=non_rem_hr,
                 entropy=float(entropy) if entropy is not None else None,
+                source=_source_from(pt.get("dataSource")),
+            )
+
+    async def list_daily_sleep_temperature(
+        self, since: datetime.datetime, until: datetime.datetime | None = None,
+    ) -> AsyncIterator[DailySleepTemperatureRow]:
+        # v4 shape: pt["dailySleepTemperatureDerivations"] = {
+        #   "date": {"year","month","day"},
+        #   "nightlyTemperatureCelsius": 32.8,
+        #   "baselineTemperatureCelsius": 32.84,
+        #   "relativeNightlyStddev30dCelsius": 0.21
+        # }
+        # `list` action only (same constraint as daily-heart-rate-variability).
+        async for pt in self._paginate(DATA_TYPES["daily_sleep_temperature"], since, until):
+            inner = pt.get("dailySleepTemperatureDerivations") or {}
+            date_obj = inner.get("date") or {}
+            if not date_obj:
+                logger.warning("google-health daily-sleep-temp point missing date: %r", pt)
+                continue
+            try:
+                d = _parse_civil_date(date_obj)
+            except (KeyError, ValueError, TypeError):
+                logger.warning("google-health daily-sleep-temp date malformed: %r", pt)
+                continue
+            nightly = inner.get("nightlyTemperatureCelsius")
+            baseline = inner.get("baselineTemperatureCelsius")
+            relstd = inner.get("relativeNightlyStddev30dCelsius")
+            name = pt.get("name") or _synth_id(
+                "daily-sleep-temp", _source_from(pt.get("dataSource")), d.isoformat(),
+            )
+            yield DailySleepTemperatureRow(
+                external_id=name,
+                date=d,
+                nightly_temp_c=float(nightly) if nightly is not None else None,
+                baseline_temp_c=float(baseline) if baseline is not None else None,
+                relative_stddev_30d_c=float(relstd) if relstd is not None else None,
                 source=_source_from(pt.get("dataSource")),
             )
 

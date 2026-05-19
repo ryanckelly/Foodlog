@@ -20,6 +20,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailySleepTemperature,
     RestingHeartRate,
     SleepSession,
     Workout,
@@ -46,6 +47,7 @@ TOOL_REQUIRED_SCOPES = {
     "get_workouts": ["foodlog.read"],
     "get_body_weight": ["foodlog.read"],
     "get_daily_hrv": ["foodlog.read"],
+    "get_daily_sleep_temperature": ["foodlog.read"],
 }
 
 MAX_RANGE_DAYS = 90
@@ -147,9 +149,10 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
             "Synced health data is also available read-only: get_daily_activity "
             "(steps + active calories), get_sleep (sleep sessions with stage "
             "breakdown when available), get_resting_heart_rate (daily resting "
-            "HR), get_daily_hrv (overnight HRV stats), get_workouts (workouts "
-            "with optional HR samples), and get_body_weight (body weight "
-            "readings in kg)."
+            "HR), get_daily_hrv (overnight HRV stats), get_daily_sleep_temperature "
+            "(skin-temp deviations from personal baseline — useful for flagging "
+            "illness/alcohol days), get_workouts (workouts with optional HR "
+            "samples), and get_body_weight (body weight readings in kg)."
         ),
         streamable_http_path="/mcp",
         auth=auth_settings,
@@ -452,6 +455,50 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                         "deep_sleep_rmssd_ms": r.deep_sleep_rmssd_ms,
                         "non_rem_hr_bpm": r.non_rem_hr_bpm,
                         "entropy": r.entropy,
+                        "source": r.source,
+                    }
+                    for r in rows
+                ]
+            }
+
+    @mcp.tool()
+    def get_daily_sleep_temperature(
+        start_date: str | None = None, end_date: str | None = None
+    ) -> dict:
+        """Get overnight skin-temperature stats for a date range.
+
+        Per-night Pixel Watch readings (skin temp, not core body temp):
+        - nightly_temp_c: tonight's measured skin temp during sleep
+        - baseline_temp_c: user's 30-day baseline (computed by Google)
+        - relative_stddev_30d_c: tonight's deviation from baseline expressed
+          in units of the user's 30-day stddev — the headline 'unusual day'
+          signal for illness (rises 2-3 days pre-symptom) and alcohol
+          (raises baseline ~0.3-0.8 C).
+
+        Defaults to the last 7 days.
+
+        Args:
+            start_date: Inclusive start date YYYY-MM-DD (default: 7 days before end_date)
+            end_date: Inclusive end date YYYY-MM-DD (default: today)
+        """
+        _require_scope("foodlog.read")
+        start, end = _resolve_range(start_date, end_date, default_lookback_days=7)
+        session_factory = get_session_factory_cached()
+        with session_factory() as session:
+            rows = (
+                session.query(DailySleepTemperature)
+                .filter(DailySleepTemperature.date >= start,
+                        DailySleepTemperature.date <= end)
+                .order_by(DailySleepTemperature.date.asc())
+                .all()
+            )
+            return {
+                "items": [
+                    {
+                        "date": r.date.isoformat(),
+                        "nightly_temp_c": r.nightly_temp_c,
+                        "baseline_temp_c": r.baseline_temp_c,
+                        "relative_stddev_30d_c": r.relative_stddev_30d_c,
                         "source": r.source,
                     }
                     for r in rows

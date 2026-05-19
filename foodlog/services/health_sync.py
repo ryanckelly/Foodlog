@@ -20,6 +20,7 @@ from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
     DailyHrv,
+    DailySleepTemperature,
     IntervalActivity,
     IntervalAzm,
     IntervalHeartRate,
@@ -102,6 +103,7 @@ class HealthSyncService:
         await _run("body_composition", self._sync_body_composition)
         await _run("resting_heart_rate", self._sync_resting_hr)
         await _run("daily_hrv", self._sync_daily_hrv)
+        await _run("daily_sleep_temperature", self._sync_daily_sleep_temperature)
         await _run("sleep_sessions", self._sync_sleep, brittle=True)
         await _run("interval_heart_rate", self._sync_interval_heart_rate)
         await _run("interval_activity", self._sync_interval_activity)
@@ -208,25 +210,43 @@ class HealthSyncService:
     async def _sync_daily_hrv(self) -> int:
         # daily-heart-rate-variability is list+reconcile only (no rollup).
         # Cursor on the date PK; on empty table, default 90-day backfill.
+        return await self._sync_daily_keyed(
+            DailyHrv, self._client.list_daily_hrv,
+            ("avg_hrv_ms", "deep_sleep_rmssd_ms", "non_rem_hr_bpm", "entropy"),
+        )
+
+    async def _sync_daily_sleep_temperature(self) -> int:
+        # daily-sleep-temperature-derivations: same list-only constraint.
+        return await self._sync_daily_keyed(
+            DailySleepTemperature, self._client.list_daily_sleep_temperature,
+            ("nightly_temp_c", "baseline_temp_c", "relative_stddev_30d_c"),
+        )
+
+    async def _sync_daily_keyed(self, model, list_fn, metric_fields: tuple[str, ...]) -> int:
+        """Shared cursor-walked upsert for date-keyed daily aggregate tables.
+
+        All such tables (daily_hrv, daily_sleep_temperature) share the same
+        shape: ``date`` PK + a fixed set of nullable metric columns + source +
+        external_id. The cursor is ``max(date)`` so a populated table doesn't
+        re-pull the full 90-day backfill every run.
+        """
         cursor_date = self._db.execute(
-            select(func.max(DailyHrv.date))
+            select(func.max(model.date))
         ).scalar_one_or_none()
         if cursor_date is None:
             since = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(days=DEFAULT_BACKFILL_DAYS)
         else:
             since = datetime.datetime.combine(cursor_date, datetime.time.min)
-        rows = [r async for r in self._client.list_daily_hrv(since=since)]
+        rows = [r async for r in list_fn(since=since)]
         for row in rows:
-            values = dict(
-                date=row.date,
-                avg_hrv_ms=row.avg_hrv_ms,
-                deep_sleep_rmssd_ms=row.deep_sleep_rmssd_ms,
-                non_rem_hr_bpm=row.non_rem_hr_bpm,
-                entropy=row.entropy,
-                source=row.source,
-                external_id=row.external_id,
-            )
-            stmt = sqlite_insert(DailyHrv).values(**values)
+            values = {
+                "date": row.date,
+                "source": row.source,
+                "external_id": row.external_id,
+            }
+            for f in metric_fields:
+                values[f] = getattr(row, f)
+            stmt = sqlite_insert(model).values(**values)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["date"],
                 set_={k: v for k, v in values.items() if k != "date"},

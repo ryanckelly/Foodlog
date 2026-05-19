@@ -135,6 +135,30 @@ async def test_list_daily_hrv(http):
         assert sparse.non_rem_hr_bpm is None
 
 
+async def test_list_daily_sleep_temperature(http):
+    """daily-sleep-temperature-derivations parser: extracts the three temp
+    fields, including the relativeNightlyStddev30dCelsius signal that flags
+    'unusual' nights for the body-sim."""
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.get(url__regex=r".*/daily-sleep-temperature-derivations/dataPoints.*").mock(
+            return_value=httpx.Response(200, json=_load("daily_sleep_temperature.json"))
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_daily_sleep_temperature(
+            since=datetime.datetime(2026, 5, 1),
+        )]
+        assert len(rows) == 2
+        unusual = next(r for r in rows if r.date == datetime.date(2026, 5, 18))
+        assert unusual.nightly_temp_c == pytest.approx(33.94)
+        assert unusual.baseline_temp_c == pytest.approx(32.84)
+        assert unusual.relative_stddev_30d_c == pytest.approx(0.857)
+        assert unusual.source == "Pixel Watch 3"
+
+        # A "normal" night — small deviation from baseline.
+        normal = next(r for r in rows if r.date == datetime.date(2026, 5, 17))
+        assert normal.relative_stddev_30d_c == pytest.approx(0.087)
+
+
 async def test_list_sleep_sessions(http):
     with respx.mock(base_url="https://health.googleapis.com") as mock:
         mock.get(url__regex=r".*/sleep/dataPoints.*").mock(
