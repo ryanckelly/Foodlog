@@ -51,6 +51,32 @@ def test_body_comp_rollup_median_of_multiple(session):
     assert row["n_weighins"] == 3
 
 
+def test_body_comp_rollup_skips_excluded_external_ids(session):
+    """Rows whose external_id is in EXCLUDED_BODY_COMP_IDS don't reach the rollup."""
+    d = datetime.date(2026, 5, 1)
+    excluded_id = next(iter(pipeline.EXCLUDED_BODY_COMP_IDS))
+    session.add(BodyComposition(
+        external_id=excluded_id,
+        measured_at=datetime.datetime(2026, 5, 1, 8, 0),
+        source="withings",
+        weight_kg=99.9,
+        body_fat_pct=33.3,
+    ))
+    session.add(BodyComposition(
+        external_id="not-excluded",
+        measured_at=datetime.datetime(2026, 5, 1, 9, 0),
+        source="withings",
+        weight_kg=80.0,
+        body_fat_pct=22.0,
+    ))
+    session.commit()
+    df = pipeline.rollup_body_comp(session, start=d, end=d)
+    row = df.iloc[0]
+    assert row["weight_kg"] == pytest.approx(80.0)
+    assert row["bf_pct"] == pytest.approx(22.0)
+    assert row["n_weighins"] == 1
+
+
 def test_rhr_rollup_forward_fills_three_days(session):
     # RHR on day 1, missing days 2-4. Days 2-3-4 forward-fill; day 5 NaN.
     session.add(RestingHeartRate(

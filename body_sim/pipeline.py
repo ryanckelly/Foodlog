@@ -30,6 +30,20 @@ from foodlog.db.models import (
 from body_sim import keytel
 
 
+# Body-composition readings excluded from body_sim analysis because they
+# don't match the user's normal weigh-in methodology (e.g. taken with
+# clothes on, off the regular morning-routine time-of-day).
+# DB rows themselves are not deleted by this filter — these are only
+# excluded from the body_sim pipeline so the dashboard / MCP tools remain
+# unaffected. See body_sim/CLAUDE.md for details on each exclusion.
+EXCLUDED_BODY_COMP_IDS: frozenset[str] = frozenset(
+    {
+        "users/7108215177813058725/dataTypes/weight/dataPoints/1777669898000",
+        "users/7108215177813058725/dataTypes/weight/dataPoints/1777824995000",
+    }
+)
+
+
 def _date_index(start: datetime.date, end: datetime.date) -> pd.DatetimeIndex:
     """Daily index covering [start, end] inclusive."""
     return pd.date_range(start=start, end=end, freq="D", name="date")
@@ -275,6 +289,7 @@ def rollup_body_comp(
             BodyComposition.measured_at < datetime.datetime.combine(
                 end + datetime.timedelta(days=1), datetime.time()
             ),
+            ~BodyComposition.external_id.in_(EXCLUDED_BODY_COMP_IDS),
         )
         .all()
     )
