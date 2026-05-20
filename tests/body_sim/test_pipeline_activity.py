@@ -72,11 +72,12 @@ def test_activity_rollup_daily_only(session):
 
 
 def test_activity_rollup_with_full_hr_coverage(session):
+    """96 rows at 15-min spacing covering 24h = full coverage."""
     d = datetime.date(2026, 5, 1)
     _add_daily_activity(session, d, steps=8000, active_kcal=300.0)
-    # 1440 minutes of HR at 80 bpm
-    for m in range(1440):
-        dt = datetime.datetime.combine(d, datetime.time()) + datetime.timedelta(minutes=m)
+    # 96 rows at 15-min spacing covering 24h at 80 bpm
+    for i in range(96):
+        dt = datetime.datetime.combine(d, datetime.time()) + datetime.timedelta(minutes=i * 15)
         _add_hr_interval(session, dt, bpm=80)
     session.commit()
     df = pipeline.rollup_activity(
@@ -102,10 +103,10 @@ def test_activity_rollup_aggregates_azm(session):
 
 
 def test_activity_rollup_partial_hr_coverage(session):
+    """48 rows covering the first 12 hours at 15-min spacing = 50% coverage."""
     d = datetime.date(2026, 5, 1)
-    # Only 12 hours of HR data
-    for m in range(720):
-        dt = datetime.datetime.combine(d, datetime.time()) + datetime.timedelta(minutes=m)
+    for i in range(48):
+        dt = datetime.datetime.combine(d, datetime.time()) + datetime.timedelta(minutes=i * 15)
         _add_hr_interval(session, dt, bpm=80)
     session.commit()
     df = pipeline.rollup_activity(
@@ -113,3 +114,19 @@ def test_activity_rollup_partial_hr_coverage(session):
     )
     row = df.iloc[0]
     assert row["hr_coverage_pct"] == pytest.approx(50.0, abs=0.5)
+
+
+def test_activity_rollup_hr_row_fills_fifteen_minutes(session):
+    """One HR row at 12:00 with 80 bpm should produce hr_coverage_pct = 15/1440*100 ≈ 1.04%."""
+    d = datetime.date(2026, 5, 1)
+    dt = datetime.datetime.combine(d, datetime.time(12, 0))
+    _add_hr_interval(session, dt, bpm=80)
+    session.commit()
+    df = pipeline.rollup_activity(
+        session, start=d, end=d, weight_kg=80.0, age=40, sex="male"
+    )
+    row = df.iloc[0]
+    expected_coverage = 15.0 / 1440 * 100  # ~1.042%
+    assert row["hr_coverage_pct"] == pytest.approx(expected_coverage, abs=0.05)
+    # Keytel for 15 minutes at 80 bpm should be ~15 * kcal_per_min(80, 80, 40, male) ≈ 15 * 4.6 ≈ 69 kcal
+    assert 40 < row["ee_hr_keytel_kcal"] < 100

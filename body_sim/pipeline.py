@@ -164,12 +164,12 @@ def rollup_activity(
     Columns: steps, active_kcal_fitbit, ee_hr_keytel_kcal, hr_coverage_pct,
     vigorous_min, cardio_min.
 
-    HR coverage is computed by placing the collected bpm_avg values into a
-    1440-slot array (one slot per minute of the day) starting at index 0.
-    This works correctly when the source data is already stored at minute
-    resolution (one row per minute), which is the Fitbit/Pixel Watch convention
-    used in this project.  If future sources have coarser intervals, the
-    coverage calculation will need revisiting.
+    HR coverage is computed by placing each bpm_avg value into the 15 slots
+    (minutes) of the 1440-slot array that correspond to the row's window,
+    using the row's start_at minute-of-day as the start slot.  This matches
+    the 15-min rollUp cadence of Google Health v4 / Pixel Watch IntervalHeartRate
+    rows.  If future sources have different cadences, adjust INTERVAL_MIN inside
+    the HR block below.
 
     Like rollup_food, this function uses datetime comparisons directly on
     DateTime columns (no func.date() needed) because the filter is an
@@ -217,17 +217,25 @@ def rollup_activity(
         )
         .all()
     )
-    per_day_hr: dict[datetime.date, list[int]] = {ts.date(): [] for ts in idx}
-    for r in hr_rows:
-        per_day_hr[r.start_at.date()].append(r.bpm_avg)
+    # IntervalHeartRate rows arrive at 15-min spacing from Google Health v4 rollUp
+    # (see docs/superpowers/specs/2026-05-01-foodlog-granular-timeline-design.md).
+    # Each row's bpm_avg is the average across a 15-min window starting at start_at.
+    INTERVAL_MIN = 15
 
-    for d, bpms in per_day_hr.items():
-        if not bpms:
+    per_day_hr: dict[datetime.date, list[tuple[int, int]]] = {ts.date(): [] for ts in idx}
+    for r in hr_rows:
+        minute_of_day = r.start_at.hour * 60 + r.start_at.minute
+        per_day_hr[r.start_at.date()].append((minute_of_day, r.bpm_avg))
+
+    for d, samples in per_day_hr.items():
+        if not samples:
             continue
-        # Place collected bpms into a 1440-slot (minutes-in-day) NaN array.
-        # Slots beyond len(bpms) remain NaN → coverage_pct counts them as missing.
         arr = np.full(1440, np.nan)
-        arr[: len(bpms)] = bpms
+        for minute_of_day, bpm in samples:
+            # Each 15-min window fills its 15 slots
+            start_slot = minute_of_day
+            end_slot = min(1440, minute_of_day + INTERVAL_MIN)
+            arr[start_slot:end_slot] = bpm
         cell = records[d]
         cell["ee_hr_keytel_kcal"] = keytel.daily_integral(
             arr, weight_kg=weight_kg, age=age, sex=sex
