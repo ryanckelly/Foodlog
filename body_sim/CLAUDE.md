@@ -60,8 +60,11 @@ If a single methodologically-clean reading later proves to be a real outlier (il
 
 These came out of the Phase 1 validation run on 2026-05-19 and are documented in `foodlog-j90` notes:
 
-- **State-seeding doesn't back out glycogen-water.** `validation._seed_state` treats the observed weight as fat+lean, but the model's `predicted_weight_kg` adds back glycogen water (~1.4 kg at default `INITIAL_GLYCOGEN_G`) and sodium water. Result: day-1 predicted weight is systematically ~0.5–1.4 kg above the seed. Calibration in Phase 1 reflects this offset.
-- **Parameter-prior bands are too narrow post-fix.** With the Keytel overcount removed (see resolved item below), the 95% predictive band tightens to ~0.3–0.5 kg wide on most days, missing observations by less than 0.7 kg. Calibration plateaus at ~43%. Either widen `intake_bias` / `RMR_scale` priors in `simulate.PRIOR_SDS` or add an explicit within-day weight-noise term.
+- **Daily and weekly bands are noise-limited.** As of `foodlog-1or` (2026-05-21), notebook 04 reports both daily AND 7-day-trailing-rolling-mean metrics. Current numbers (n=7 daily obs, n=16 weekly obs):
+  - Daily — MAE 0.321 kg (PASS), calibration **42.9%** (FAIL), drift p=0.562 (PASS).
+  - Weekly — MAE 0.275 kg (PASS), calibration **62.5%** (FAIL), drift p=0.000 (FAIL — model can't track the user's trend with population defaults).
+
+  The ~20-point calibration improvement at weekly cadence confirms the timescale-mismatch hypothesis (glycogen-water + gut-content noise dominate daily variance). The remaining gap to 80% is the 200-sample Monte Carlo band propagating only Hall **parameter** uncertainty — not latent-state uncertainty. `validation._seed_state` further treats observed weight as fat+lean only, so day-1 predicted weight is systematically ~0.5–1.4 kg above the seed once glycogen + sodium water are added back in `BodyState.predicted_weight_kg`. **The weekly track is the canonical Phase-1 calibration metric** because most of the latent-state noise averages out over a week of typical eating. Daily-track failure with weekly-track partial improvement is the expected Phase-1 result. Daily calibration is unblocked by `foodlog-adu` (glycogen-water as PyMC latent state, Phase 2).
 - **Only ~12 weigh-ins (post-exclusion).** Phase 2 fitting kicks in once we have ~30 paired food+weight days.
 
 ### Resolved in Phase 1

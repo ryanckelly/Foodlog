@@ -50,12 +50,26 @@ def trajectory_plot(
     return fig
 
 
-def residual_plot(walk_df: pd.DataFrame) -> plt.Figure:
-    """Residual time-series: observed − predicted median, with ±0.5 kg refs."""
+def residual_plot(
+    walk_df: pd.DataFrame, weekly_overlay: bool = False
+) -> plt.Figure:
+    """Residual time-series: observed − predicted median, with ±0.5 kg refs.
+
+    If ``weekly_overlay=True``, additionally plot the 7-day trailing rolling
+    mean of the residuals. The weekly trace is the visual companion to
+    ``evaluate.summary_report_weekly`` — useful confirmation that the weekly
+    signal stays inside the noise band even when the daily signal is busy.
+    """
     agg = _aggregate(walk_df, "weight").dropna(subset=["observed"])
     residuals = agg["observed"] - agg["median"]
     fig, ax = plt.subplots(figsize=(10, 4))
-    ax.scatter(agg["date"], residuals, color="black")
+    ax.scatter(agg["date"], residuals, color="black", label="Daily residual")
+    if weekly_overlay:
+        weekly_resid = residuals.rolling(window=7, min_periods=1).mean()
+        ax.plot(
+            agg["date"], weekly_resid,
+            color="tab:blue", linewidth=2, label="Weekly (7-day trailing) mean residual",
+        )
     ax.axhline(0, color="gray", linewidth=1)
     ax.axhline(0.5, color="red", linestyle="--", linewidth=1, label="±0.5 kg scale noise")
     ax.axhline(-0.5, color="red", linestyle="--", linewidth=1)

@@ -53,3 +53,25 @@ def test_three_panel_summary_returns_figure():
     walk = _walk_df()
     fig = plotting.three_panel_summary(walk)
     assert len(fig.axes) == 3
+
+
+def test_residual_plot_weekly_overlay():
+    """residual_plot(walk_df, weekly_overlay=True) returns a Figure with the
+    weekly trace as an additional labeled line."""
+    rng = np.random.default_rng(0)
+    rows = []
+    for d in range(21):
+        for s in range(10):
+            rows.append({
+                "date": pd.Timestamp("2026-05-01") + pd.Timedelta(days=d),
+                "sample": s,
+                "predicted_weight_kg": 80.0 + rng.normal(0, 0.3),
+                "observed_weight_kg": 80.0 + rng.normal(0, 1.0),
+            })
+    walk_df = pd.DataFrame(rows)
+    fig = plotting.residual_plot(walk_df, weekly_overlay=True)
+    ax = fig.axes[0]
+    labels = [line.get_label() for line in ax.get_lines()]
+    assert any("week" in label.lower() for label in labels), (
+        f"weekly overlay line not found; got labels {labels}"
+    )
