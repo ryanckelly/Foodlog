@@ -64,3 +64,66 @@ def test_keytel_coverage_pct():
     hrs = np.full(1440, 120, dtype=float)
     hrs[:720] = np.nan
     assert keytel.coverage_pct(hrs) == pytest.approx(50.0, abs=0.1)
+
+
+def test_daily_integral_above_baseline_zero_when_hr_equals_baseline():
+    """If every minute is at the baseline HR, activity-above-baseline = 0."""
+    baseline_hr = 60.0
+    hrs = np.full(1440, baseline_hr, dtype=float)
+    total = keytel.daily_integral_above_baseline(
+        hrs, baseline_hr=baseline_hr, weight_kg=80, age=40, sex="male"
+    )
+    assert total == pytest.approx(0.0, abs=0.1)
+
+
+def test_daily_integral_above_baseline_subtracts_personal_floor():
+    """At HR above baseline, the integral equals the *excess* per-minute kcal
+    above what would be predicted at the baseline HR, summed across the day.
+    """
+    baseline_hr = 60.0
+    hrs = np.full(1440, 120.0, dtype=float)
+    total = keytel.daily_integral_above_baseline(
+        hrs, baseline_hr=baseline_hr, weight_kg=80, age=40, sex="male"
+    )
+    # Per-minute excess = kcal(120) - kcal(60) — and the baseline at 60 ≈ 1.62
+    per_min_120 = keytel.kcal_per_min(120, 80, 40, "male")
+    per_min_60 = keytel.kcal_per_min(60, 80, 40, "male")
+    expected = 1440 * (per_min_120 - per_min_60)
+    assert total == pytest.approx(expected, abs=1.0)
+
+
+def test_daily_integral_above_baseline_clips_below_baseline():
+    """When HR dips below the baseline (e.g. deep sleep, brief vagal burst),
+    the per-minute contribution must clip to 0 — we never *subtract* activity.
+    """
+    baseline_hr = 60.0
+    hrs = np.full(1440, 50.0, dtype=float)  # below baseline all day
+    total = keytel.daily_integral_above_baseline(
+        hrs, baseline_hr=baseline_hr, weight_kg=80, age=40, sex="male"
+    )
+    assert total == pytest.approx(0.0, abs=0.1)
+
+
+def test_daily_integral_above_baseline_handles_nan_minutes():
+    """NaN minutes (watch off-wrist) skipped, same as naive integral."""
+    baseline_hr = 60.0
+    hrs = np.full(1440, 120.0, dtype=float)
+    hrs[:720] = np.nan
+    total = keytel.daily_integral_above_baseline(
+        hrs, baseline_hr=baseline_hr, weight_kg=80, age=40, sex="male"
+    )
+    per_min_excess = keytel.kcal_per_min(120, 80, 40, "male") - keytel.kcal_per_min(60, 80, 40, "male")
+    expected = 720 * per_min_excess
+    assert total == pytest.approx(expected, abs=1.0)
+
+
+def test_daily_integral_above_baseline_matches_naive_when_baseline_zero():
+    """A zero baseline should reduce to the naive integral (modulo the
+    naive integral's clip at HR≈40-ish where it goes negative; for HR=120
+    the equation is well above the clip)."""
+    hrs = np.full(1440, 120.0, dtype=float)
+    naive = keytel.daily_integral(hrs, weight_kg=80, age=40, sex="male")
+    with_zero_baseline = keytel.daily_integral_above_baseline(
+        hrs, baseline_hr=0.0, weight_kg=80, age=40, sex="male"
+    )
+    assert with_zero_baseline == pytest.approx(naive, abs=1.0)

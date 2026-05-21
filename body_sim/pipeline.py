@@ -16,6 +16,8 @@ import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from body_sim import baseline, keytel
+
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
@@ -26,8 +28,6 @@ from foodlog.db.models import (
     SleepSession,
     Workout,
 )
-
-from body_sim import keytel
 
 
 # Body-composition readings excluded from body_sim analysis because they
@@ -172,6 +172,7 @@ def rollup_activity(
     weight_kg: float,
     age: int,
     sex: str,
+    baseline_hr: float | None = None,
 ) -> pd.DataFrame:
     """Aggregate activity sources to one row per day.
 
@@ -251,10 +252,16 @@ def rollup_activity(
             end_slot = min(1440, minute_of_day + INTERVAL_MIN)
             arr[start_slot:end_slot] = bpm
         cell = records[d]
-        cell["ee_hr_keytel_kcal"] = keytel.daily_integral(
-            arr, weight_kg=weight_kg, age=age, sex=sex
-        )
+        if baseline_hr is None:
+            cell["ee_hr_keytel_kcal"] = keytel.daily_integral(
+                arr, weight_kg=weight_kg, age=age, sex=sex
+            )
+        else:
+            cell["ee_hr_keytel_kcal"] = keytel.daily_integral_above_baseline(
+                arr, baseline_hr=baseline_hr, weight_kg=weight_kg, age=age, sex=sex
+            )
         cell["hr_coverage_pct"] = keytel.coverage_pct(arr)
+        cell["keytel_baseline_bpm"] = float("nan") if baseline_hr is None else float(baseline_hr)
 
     df = pd.DataFrame([records[ts.date()] for ts in idx], index=idx)
     return df
@@ -268,6 +275,7 @@ def _empty_activity_row() -> dict:
         "hr_coverage_pct": 0.0,
         "vigorous_min": 0,
         "cardio_min": 0,
+        "keytel_baseline_bpm": np.nan,
     }
 
 
@@ -433,6 +441,17 @@ def rollup_workouts(
     return pd.DataFrame(records, index=idx)
 
 
+def first_food_log_date(session: Session) -> datetime.date | None:
+    """Return the date of the earliest FoodEntry in the database.
+
+    Used by notebooks to scope the rollup window to actual logging history
+    rather than pulling in N days of pre-logging emptiness. Returns None if
+    no food entries exist yet.
+    """
+    ts = session.query(func.min(FoodEntry.logged_at)).scalar()
+    return ts.date() if ts else None
+
+
 def build_daily_rollup(
     session: Session,
     start: datetime.date,
@@ -440,6 +459,7 @@ def build_daily_rollup(
     weight_kg_fallback: float,
     age: int,
     sex: str,
+    keytel_baseline_method: baseline.BaselineMethod = "resting_states_p10",
 ) -> pd.DataFrame:
     """Build the canonical daily-rollup DataFrame for body_sim.
 
@@ -448,6 +468,12 @@ def build_daily_rollup(
         start, end: inclusive date range
         weight_kg_fallback: weight to use for Keytel on days before any observed weigh-in
         age, sex: user profile
+        keytel_baseline_method: how to estimate the per-day awake-resting HR
+            floor that gets subtracted from Keytel before integrating. Default
+            ``"resting_states_p10"`` — the empirical winner from foodlog-w76,
+            takes the 10th-percentile bpm across HR windows where the user has
+            zero steps, is awake, and is not in a workout. ``"naive"`` reverts
+            to the pre-fix unsubtracted integral.
 
     Returns:
         DataFrame indexed by date, one row per day in [start, end].
@@ -458,16 +484,49 @@ def build_daily_rollup(
     sleep = rollup_sleep(session, start, end)
     workouts = rollup_workouts(session, start, end)
 
-    # Reference weight per day: most recent observed weight up to and including that day,
-    # or fallback if none yet observed.
-    weight_series = bc["weight_kg"].ffill().fillna(weight_kg_fallback)
+    # Reference weight per day: most recent observed weight up to and including
+    # that day, or the *first* observed weight for the leading gap before any
+    # weigh-in exists, or the literal fallback if there are no observations at
+    # all. The bfill prevents a static 80.0 kg fallback from biasing Keytel on
+    # days where we have HR data but no weigh-in yet.
+    weight_series = bc["weight_kg"].ffill().bfill().fillna(weight_kg_fallback)
+
+    # Per-day baseline HR (None series for "naive" — fast path; otherwise compute
+    # the baseline per day and forward-fill across days the method can't cover
+    # (weekends for desk methods; nights without recorded sleep for sleep method).
+    baseline_series = _build_baseline_series(
+        session, weight_series.index, keytel_baseline_method
+    )
+
     activity = rollup_activity_with_per_day_weight(
-        session, start, end, weight_series, age, sex
+        session, start, end, weight_series, age, sex, baseline_series
     )
 
     df = pd.concat([food, activity, bc, rhr, sleep, workouts], axis=1)
     df["reference_weight_kg"] = weight_series
     return df
+
+
+def _build_baseline_series(
+    session: Session,
+    idx: pd.DatetimeIndex,
+    method: baseline.BaselineMethod,
+) -> pd.Series:
+    """Per-day baseline HR with forward-fill across uncovered days.
+
+    Returns an all-NaN series for method=="naive" so callers fall through to
+    the unsubtracted integral.
+    """
+    if method == "naive":
+        return pd.Series(np.nan, index=idx, dtype=float)
+    raw = pd.Series(
+        [baseline.baseline_for_day(session, ts.date(), method) for ts in idx],
+        index=idx,
+        dtype="float64",
+    )
+    # Forward-fill across weekends / sleep-less days; back-fill the leading
+    # gap if the series starts on an uncovered day.
+    return raw.ffill().bfill()
 
 
 def rollup_activity_with_per_day_weight(
@@ -477,6 +536,7 @@ def rollup_activity_with_per_day_weight(
     weight_series: pd.Series,
     age: int,
     sex: str,
+    baseline_series: pd.Series | None = None,
 ) -> pd.DataFrame:
     """Variant of rollup_activity that uses a per-day weight Series for Keytel.
 
@@ -487,6 +547,14 @@ def rollup_activity_with_per_day_weight(
     frames = []
     for ts, weight in weight_series.items():
         d = ts.date()
-        sub = rollup_activity(session, start=d, end=d, weight_kg=float(weight), age=age, sex=sex)
+        baseline_hr: float | None = None
+        if baseline_series is not None:
+            v = baseline_series.get(ts)
+            if v is not None and pd.notna(v):
+                baseline_hr = float(v)
+        sub = rollup_activity(
+            session, start=d, end=d, weight_kg=float(weight),
+            age=age, sex=sex, baseline_hr=baseline_hr,
+        )
         frames.append(sub)
     return pd.concat(frames)

@@ -60,9 +60,14 @@ If a single methodologically-clean reading later proves to be a real outlier (il
 
 These came out of the Phase 1 validation run on 2026-05-19 and are documented in `foodlog-j90` notes:
 
-- **State-seeding doesn't back out glycogen-water.** `validation._seed_state` treats the observed weight as fat+lean, but the model's `predicted_weight_kg` adds back glycogen water (~1.4 kg at default `INITIAL_GLYCOGEN_G`) and sodium water. Result: day-1 predicted weight is systematically ~1.4 kg above the seed. Calibration in Phase 1 reflects this offset.
-- **Keytel overcounts at sedentary HR.** Integrated over 24 h at resting band, `ee_hr_keytel_kcal` averages ~3,400 kcal/day — implausible. Phase 2 will fit `activity_bias`; if the posterior centers near ~0.2–0.3, the structural fix is needed (rest-baseline subtraction or HR-zone-only signal). See `foodlog-j90` notes for the decision tree.
-- **Only 12 weigh-ins (post-exclusion).** Phase 2 fitting kicks in once we have ~30 paired food+weight days.
+- **State-seeding doesn't back out glycogen-water.** `validation._seed_state` treats the observed weight as fat+lean, but the model's `predicted_weight_kg` adds back glycogen water (~1.4 kg at default `INITIAL_GLYCOGEN_G`) and sodium water. Result: day-1 predicted weight is systematically ~0.5–1.4 kg above the seed. Calibration in Phase 1 reflects this offset.
+- **Parameter-prior bands are too narrow post-fix.** With the Keytel overcount removed (see resolved item below), the 95% predictive band tightens to ~0.3–0.5 kg wide on most days, missing observations by less than 0.7 kg. Calibration plateaus at ~43%. Either widen `intake_bias` / `RMR_scale` priors in `simulate.PRIOR_SDS` or add an explicit within-day weight-noise term.
+- **Only ~12 weigh-ins (post-exclusion).** Phase 2 fitting kicks in once we have ~30 paired food+weight days.
+
+### Resolved in Phase 1
+
+- **Keytel overcounting at sedentary HR** (`foodlog-w76`, 2026-05-20). Naïve daily integration of Keytel double-counted RMR for sedentary minutes — `ee_hr_keytel_kcal` averaged ~3,400 kcal/day, driving total expenditure to ~5,150 kcal (≈2× RMR). The fix subtracts the per-minute kcal Keytel predicts at a personal *awake-resting* baseline HR before integrating, so only activity *above* baseline is added to Mifflin RMR. Default baseline method is `resting_states_p10`: P10 of HR across 15-min windows with zero steps, not in sleep, not in a workout (eligibility filter uses `IntervalActivity`/`SleepSession`/`Workout` tables). Empirical winner of a 9-method bake-off (`notebooks/run_baseline_comparison.py`). Pre-fix nb04: MAE 1.154 kg, calibration 0%. Post-fix nb04: MAE 0.321 kg, calibration 43%.
+- **Validation harness silently bypassed model's NaN-intake skip contract** (`foodlog-5tf`, 2026-05-20). `validation._row_to_input` coerced NaN intake to 0.0, making the model treat unlogged days as zero-intake days under full expenditure. Fix: preserve NaN so `model.step`'s skip guard fires. Bug was latent on the current walk window (no NaN-intake days post-first-weigh-in) but is correctness-preserving regression-prevention.
 
 ## Re-executing the notebooks
 
@@ -76,3 +81,5 @@ done
 ```
 
 Notebook 02 must run first — it produces the parquet artifact that the others consume.
+
+The default window auto-tracks logging history: nb02 calls `pipeline.first_food_log_date(session)` and pulls everything from that date forward. To scope to a fixed lookback instead (e.g. for a 60-day retrospective HR-only analysis), override the `start` variable in the second cell.

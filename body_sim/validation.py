@@ -34,8 +34,13 @@ def _seed_state(reference_weight: float, target_bf_pct: float = 22.0) -> model.B
 
 def _row_to_input(row: pd.Series) -> dict:
     inputs = {col: row[col] for col in INPUT_COLUMNS}
-    # Coerce types
-    for k in ("intake_kcal", "protein_g", "carb_g", "fat_g", "sodium_mg",
+    # intake_kcal NaN must propagate so model.step's skip-on-NaN guard fires;
+    # coercing it to 0.0 would make the model treat unlogged days as zero-intake
+    # days under full expenditure, inventing phantom deficits.
+    inputs["intake_kcal"] = float("nan") if pd.isna(inputs["intake_kcal"]) else float(inputs["intake_kcal"])
+    # Other numerics coerce to 0.0 — they are only consumed when intake_kcal is
+    # finite, in which case the pipeline emits real values for them too.
+    for k in ("protein_g", "carb_g", "fat_g", "sodium_mg",
               "ee_hr_keytel_kcal", "workout_kcal", "hr_coverage_pct"):
         v = inputs[k]
         inputs[k] = 0.0 if pd.isna(v) else float(v)
