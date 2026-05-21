@@ -56,6 +56,8 @@ def forward_walk(
     profile: UserProfile,
     sample_n: int,
     seed: int | None = None,
+    mode: str = "prior",
+    idata=None,
 ) -> pd.DataFrame:
     """Forward-walking validation over the rollup DataFrame.
 
@@ -63,13 +65,23 @@ def forward_walk(
         df: daily-rollup DataFrame (output of pipeline.build_daily_rollup)
         step_days: chunk size for the walk
         profile: user profile
-        sample_n: number of parameter samples per chunk
+        sample_n: number of parameter samples per chunk (prior) or posterior
+            draws to sample (posterior).
         seed: RNG seed
+        mode: ``"prior"`` (Phase-1 population-default Monte Carlo) or
+            ``"posterior"`` (Phase-2 draws from arviz.InferenceData).
+        idata: arviz.InferenceData from ``bayesian.fit``. Required when
+            mode="posterior".
 
     Returns:
         Long-form DataFrame with columns date, sample, predicted_weight_kg,
-        observed_weight_kg, fat_mass_kg, lean_mass_kg.
+        observed_weight_kg, fat_mass_kg, lean_mass_kg,
+        weigh_in_protocol_controlled.
     """
+    if mode == "posterior":
+        if idata is None:
+            raise ValueError("mode='posterior' requires idata=")
+        return _forward_walk_posterior(df, profile, sample_n, seed, idata)
     if df.empty:
         return pd.DataFrame()
 
@@ -128,4 +140,66 @@ def forward_walk(
     df_out = pd.DataFrame(records)
     if "weigh_in_protocol_controlled" in df_out.columns:
         df_out["weigh_in_protocol_controlled"] = df_out["weigh_in_protocol_controlled"].astype(object)
+    return df_out
+
+
+def _forward_walk_posterior(
+    df: pd.DataFrame, profile: UserProfile,
+    sample_n: int, seed: int | None, idata,
+) -> pd.DataFrame:
+    """Posterior-mode forward walk.
+
+    Draws ``sample_n`` posterior samples from ``idata`` and propagates each
+    draw's Hall trajectory + latent ``g`` through every day in ``df``. Per
+    day, also samples per-protocol observation noise.
+
+    Unlike the prior mode, no chunk re-anchoring happens — the latent state
+    already absorbs short-term variance, so the single forward pass is the
+    right shape for the posterior predictive.
+    """
+    from body_sim import bayesian
+
+    if df.empty:
+        return pd.DataFrame()
+
+    posterior = idata.posterior
+    g_draws = posterior.g.values.reshape(-1, posterior.g.shape[-1])
+    sigma_c = posterior.sigma_obs_controlled.values.flatten()
+    sigma_u = posterior.sigma_obs_uncontrolled.values.flatten()
+    n_draws_total = g_draws.shape[0]
+
+    hall_path = bayesian._hall_trajectory(df, profile)
+    hall_path = pd.Series(hall_path).ffill().bfill().fillna(80.0).values
+
+    if "weigh_in_protocol_controlled" in df.columns:
+        is_controlled = df["weigh_in_protocol_controlled"].astype(bool).values
+    else:
+        is_controlled = np.zeros(len(df), dtype=bool)
+
+    rng = np.random.default_rng(seed)
+    pick = rng.choice(n_draws_total, size=sample_n, replace=(sample_n > n_draws_total))
+
+    records = []
+    for s_idx, draw_idx in enumerate(pick):
+        sigma_per_day = np.where(is_controlled, sigma_c[draw_idx], sigma_u[draw_idx])
+        obs_noise = rng.normal(0.0, sigma_per_day)
+        traj = hall_path + g_draws[draw_idx, :] + obs_noise
+        for d, ts in enumerate(df.index):
+            observed = (
+                float(df.iloc[d]["weight_kg"])
+                if "weight_kg" in df.columns and pd.notna(df.iloc[d]["weight_kg"])
+                else np.nan
+            )
+            records.append({
+                "date": ts,
+                "sample": s_idx,
+                "predicted_weight_kg": float(traj[d]),
+                "observed_weight_kg": observed,
+                "fat_mass_kg": np.nan,
+                "lean_mass_kg": np.nan,
+                "body_fat_pct": np.nan,
+                "weigh_in_protocol_controlled": bool(is_controlled[d]),
+            })
+    df_out = pd.DataFrame(records)
+    df_out["weigh_in_protocol_controlled"] = df_out["weigh_in_protocol_controlled"].astype(object)
     return df_out

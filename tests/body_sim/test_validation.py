@@ -95,6 +95,33 @@ def test_row_to_input_preserves_nan_intake():
     )
 
 
+def test_forward_walk_posterior_mode_smoke():
+    """Posterior-mode walk requires idata and returns a DataFrame with the
+    posterior-band-augmented predicted_weight_kg column."""
+    pymc = pytest.importorskip("pymc")
+    from body_sim import bayesian
+    from tests.body_sim.test_bayesian import _synthetic_data
+
+    df, _ = _synthetic_data(seed=0, n_days=10)
+    idata = bayesian.fit(df, profile=DEFAULT_PROFILE, draws=100, tune=100, seed=0)
+    out = validation.forward_walk(
+        df, step_days=7, profile=DEFAULT_PROFILE, sample_n=50, seed=0,
+        mode="posterior", idata=idata,
+    )
+    assert "predicted_weight_kg" in out.columns
+    assert "observed_weight_kg" in out.columns
+    assert len(out) > 0
+
+
+def test_forward_walk_posterior_mode_requires_idata():
+    df = _synthetic_rollup(n_days=7)
+    with pytest.raises(ValueError, match="idata"):
+        validation.forward_walk(
+            df, step_days=7, profile=DEFAULT_PROFILE, sample_n=10, seed=0,
+            mode="posterior", idata=None,
+        )
+
+
 def test_forward_walk_propagates_protocol_flag():
     """The protocol_controlled bool from the rollup should appear in the
     long-form walk DataFrame alongside observed_weight_kg."""

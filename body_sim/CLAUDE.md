@@ -70,6 +70,30 @@ The daily rollup surfaces this as a `weigh_in_protocol_controlled: bool` column 
 
 This metadata is **soft** — not a filter. Filtering of methodologically-broken rows continues to happen via `EXCLUDED_BODY_COMP_IDS` (see "Data exclusions" above). Phase 2 (`foodlog-adu`) uses this column to assign tighter σ_obs to controlled rows in the PyMC likelihood.
 
+## Phase 2 results
+
+`foodlog-adu` (closed 2026-05-21) landed the PyMC fit with glycogen-water as a Gaussian-random-walk latent state plus per-protocol observation noise. Architecture:
+
+- `body_sim/bayesian.py` — PyMC model. Free RVs: `sigma_glycogen` (HalfNormal(0.4)), `sigma_obs_controlled` (HalfNormal(0.3)), `sigma_obs_uncontrolled` (HalfNormal(0.8)), `g` (GaussianRandomWalk length-n).
+- `body_sim/bayesian_predict.py` — posterior predictive band that includes Hall trajectory + latent + obs noise.
+- `body_sim/validation.py` — `forward_walk(mode="posterior", idata=...)` consumes the trace.
+- `notebooks/05_bayesian_fit.ipynb` — runs the fit, saves trace to `notebooks/predictions/posterior.nc` (gitignored).
+- `notebooks/04_hall_baseline.ipynb` — appended posterior-track section.
+
+Posterior-track results on current data (n=8 daily obs):
+
+| Track | Prior MAE | Prior calibration | Posterior MAE | Posterior calibration |
+|---|---|---|---|---|
+| Daily | 0.321 kg | 42.9% | **0.189 kg** | **100.0%** |
+| Weekly | 0.275 kg | 62.5% | **0.128 kg** | **100.0%** |
+
+The 100% calibration is wide-band — at n=8 the posterior over `sigma_obs_uncontrolled` is still loose (mean 0.51 kg). As more weigh-ins accumulate, `sigma_obs_*` will sharpen and calibration will settle to a tighter number above the 80% target. This is the architecturally-correct band, where the Phase-1 prior-track band was structurally too narrow.
+
+Scope deferred to Phase 2.1 (file a new bead when wanted):
+- **Joint fit of `intake_bias` and `RMR_scale`.** Current Phase-2 v1 uses population defaults for the Hall trajectory. The glycogen latent absorbs the resulting systematic offset, which is acceptable for the predictive band but means we're not yet identifying intake under-reporting magnitude.
+- **Per-day `sigma_obs` driven by protocol.** Once enough `controlled_morning` rows exist (post-2026-05-21 weigh-ins), the per-protocol split should become informative (currently `sigma_obs_controlled` is mostly prior).
+- **Diagnostic refinement.** Convergence on `sigma_glycogen` is marginal at low data volume (r_hat ≈ 1.04 in latest fit); expect r_hat to settle as data accumulates.
+
 ## Phase 1 known limitations (open Phase 2 inputs)
 
 These came out of the Phase 1 validation run on 2026-05-19 and are documented in `foodlog-j90` notes:

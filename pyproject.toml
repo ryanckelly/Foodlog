@@ -37,6 +37,10 @@ body_sim = [
     "ipywidgets>=8.1.0",
     "jupyter>=1.0.0",
 ]
+body_sim_bayes = [
+    "pymc>=5.10",
+    "arviz>=0.17",
+]
 
 [tool.setuptools]
 packages = ["foodlog", "foodlog.api", "foodlog.api.routers", "foodlog.clients", "foodlog.db", "foodlog.models", "foodlog.services", "mcp_server", "body_sim"]
@@ -44,3 +48,6 @@ packages = ["foodlog", "foodlog.api", "foodlog.api.routers", "foodlog.clients", 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
