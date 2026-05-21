@@ -146,3 +146,42 @@ def test_workouts_rollup_aggregates_by_start_date(session):
     df = pipeline.rollup_workouts(session, start=d, end=d)
     assert df.iloc[0]["workout_kcal"] == pytest.approx(650.0)
     assert df.iloc[0]["workout_min"] == 90
+
+
+def test_body_composition_has_weigh_in_protocol_column():
+    """Schema regression: the BodyComposition model must expose
+    weigh_in_protocol so sync-time tagging + backfill have a place to write."""
+    from foodlog.db.models import BodyComposition
+    assert hasattr(BodyComposition, "weigh_in_protocol"), (
+        "BodyComposition.weigh_in_protocol missing — schema migration "
+        "(foodlog-hg8) not applied"
+    )
+
+
+def test_rollup_body_comp_emits_protocol_controlled_flag(session):
+    """A day with all weigh-ins flagged controlled_morning gets
+    weigh_in_protocol_controlled=True; a day with any uncontrolled weigh-in
+    gets False; a day with no weigh-ins gets False."""
+    session.add(BodyComposition(
+        external_id="a", measured_at=datetime.datetime(2026, 5, 22, 9, 0),
+        weight_kg=82.0, body_fat_pct=21.0, source="test",
+        weigh_in_protocol="controlled_morning",
+    ))
+    session.add(BodyComposition(
+        external_id="b", measured_at=datetime.datetime(2026, 5, 23, 9, 0),
+        weight_kg=82.5, body_fat_pct=21.1, source="test",
+        weigh_in_protocol="controlled_morning",
+    ))
+    session.add(BodyComposition(
+        external_id="c", measured_at=datetime.datetime(2026, 5, 23, 19, 0),
+        weight_kg=83.0, body_fat_pct=21.2, source="test",
+        weigh_in_protocol="uncontrolled",
+    ))
+    session.commit()
+
+    out = pipeline.rollup_body_comp(
+        session, datetime.date(2026, 5, 22), datetime.date(2026, 5, 24)
+    )
+    assert out.loc[datetime.datetime(2026, 5, 22), "weigh_in_protocol_controlled"] is True
+    assert out.loc[datetime.datetime(2026, 5, 23), "weigh_in_protocol_controlled"] is False
+    assert out.loc[datetime.datetime(2026, 5, 24), "weigh_in_protocol_controlled"] is False

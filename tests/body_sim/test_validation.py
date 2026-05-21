@@ -95,6 +95,20 @@ def test_row_to_input_preserves_nan_intake():
     )
 
 
+def test_forward_walk_propagates_protocol_flag():
+    """The protocol_controlled bool from the rollup should appear in the
+    long-form walk DataFrame alongside observed_weight_kg."""
+    df = _synthetic_rollup(n_days=14)
+    df["weigh_in_protocol_controlled"] = False
+    df.loc[df.index[0], "weigh_in_protocol_controlled"] = True
+    out = validation.forward_walk(
+        df, step_days=7, profile=DEFAULT_PROFILE, sample_n=2, seed=0
+    )
+    assert "weigh_in_protocol_controlled" in out.columns
+    day_0 = out[out["date"] == df.index[0]]
+    assert day_0["weigh_in_protocol_controlled"].iloc[0] is True
+
+
 def test_forward_walk_does_not_invent_deficits_on_nan_intake_days():
     """13 unlogged days following one logged maintenance day should not
     produce phantom weight loss. Without the fix, expenditure runs against

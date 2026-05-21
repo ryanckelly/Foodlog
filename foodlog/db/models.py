@@ -174,6 +174,12 @@ class BodyComposition(Base):
     source: Mapped[str] = mapped_column(String(128), nullable=False)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Soft metadata: "controlled_morning" if the weigh-in followed the user's
+    # established post-void pre-breakfast routine (07:00-11:00 local on/after
+    # 2026-05-21); "uncontrolled" otherwise; NULL for un-backfilled
+    # historical rows (treated as "uncontrolled" downstream).
+    # See body_sim/weigh_in.py for the classification rule.
+    weigh_in_protocol: Mapped[str | None] = mapped_column(String(32), nullable=True)
     fetched_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

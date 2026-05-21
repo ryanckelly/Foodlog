@@ -54,6 +54,9 @@ def create_app() -> FastAPI:
             "asleep_min": "INTEGER",
             "in_period_min": "INTEGER",
         })
+        ensure_columns(engine, "body_composition", {
+            "weigh_in_protocol": "VARCHAR(32)",
+        })
 
         # Start MCP session manager (required for streamable_http_app to work)
         async with mcp.session_manager.run():

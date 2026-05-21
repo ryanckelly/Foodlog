@@ -584,3 +584,44 @@ async def test_sync_all_includes_interval_metrics(db_session):
     assert result.rows_upserted.get("interval_heart_rate") == 1
     assert result.rows_upserted.get("interval_activity") == 1
     assert result.rows_upserted.get("interval_azm") == 1
+
+
+async def test_sync_body_composition_tags_protocol(db_session):
+    """Sync-time heuristic: morning post-cutoff -> controlled_morning;
+    evening post-cutoff or pre-cutoff -> uncontrolled."""
+    c = MagicMock()
+    rows = [
+        BodyCompositionRow(
+            external_id="bc-morning-post",
+            measured_at=datetime.datetime(2026, 5, 22, 9, 30),
+            weight_kg=82.0, body_fat_pct=21.0, source="renpho",
+        ),
+        BodyCompositionRow(
+            external_id="bc-evening-post",
+            measured_at=datetime.datetime(2026, 5, 22, 20, 0),
+            weight_kg=82.5, body_fat_pct=21.1, source="renpho",
+        ),
+        BodyCompositionRow(
+            external_id="bc-morning-pre",
+            measured_at=datetime.datetime(2026, 5, 10, 9, 30),
+            weight_kg=83.0, body_fat_pct=21.5, source="renpho",
+        ),
+    ]
+    c.list_body_composition = lambda *a, **kw: _collect(rows)
+    c.list_daily_activity = lambda *a, **kw: _collect([])
+    c.list_resting_heart_rate = lambda *a, **kw: _collect([])
+    c.list_daily_hrv = lambda *a, **kw: _collect([])
+    c.list_daily_sleep_temperature = lambda *a, **kw: _collect([])
+    c.list_daily_spo2 = lambda *a, **kw: _collect([])
+    c.list_daily_respiratory_rate = lambda *a, **kw: _collect([])
+    c.list_sleep_sessions = lambda *a, **kw: _collect([])
+    c.list_workouts = lambda *a, **kw: _collect([])
+    c.list_workout_hr_samples = lambda *a, **kw: _collect([])
+
+    svc = HealthSyncService(db_session, c)
+    await svc.sync_all()
+
+    rows_by_id = {r.external_id: r for r in db_session.query(BodyComposition).all()}
+    assert rows_by_id["bc-morning-post"].weigh_in_protocol == "controlled_morning"
+    assert rows_by_id["bc-evening-post"].weigh_in_protocol == "uncontrolled"
+    assert rows_by_id["bc-morning-pre"].weigh_in_protocol == "uncontrolled"

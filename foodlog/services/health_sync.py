@@ -168,15 +168,19 @@ class HealthSyncService:
         return len(rows)
 
     async def _sync_body_composition(self) -> int:
+        from body_sim.weigh_in import classify_protocol
+
         since = cursor_for(self._db, BodyComposition, "measured_at", DEFAULT_BACKFILL_DAYS)
         rows = [r async for r in self._client.list_body_composition(since=since)]
         for row in rows:
+            protocol = classify_protocol(row.measured_at)
             stmt = sqlite_insert(BodyComposition).values(
                 external_id=row.external_id,
                 measured_at=row.measured_at,
                 weight_kg=row.weight_kg,
                 body_fat_pct=row.body_fat_pct,
                 source=row.source,
+                weigh_in_protocol=protocol,
             )
             stmt = stmt.on_conflict_do_update(
                 index_elements=["external_id"],
@@ -185,6 +189,7 @@ class HealthSyncService:
                     weight_kg=row.weight_kg,
                     body_fat_pct=row.body_fat_pct,
                     source=row.source,
+                    weigh_in_protocol=protocol,
                 ),
             )
             self._db.execute(stmt)

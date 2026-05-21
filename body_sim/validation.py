@@ -114,6 +114,9 @@ def forward_walk(
                         "fat_mass_kg": float(result.fat_mass_kg[s, d_offset]),
                         "lean_mass_kg": float(result.lean_mass_kg[s, d_offset]),
                         "body_fat_pct": float(result.body_fat_pct[s, d_offset]),
+                        "weigh_in_protocol_controlled": bool(
+                            chunk.iloc[d_offset].get("weigh_in_protocol_controlled", False)
+                        ),
                     }
                 )
         # Next chunk: re-seed from the most recent observed weight in this chunk if any
@@ -122,4 +125,7 @@ def forward_walk(
             initial = _seed_state(float(weighed.iloc[-1]))
         cur_idx = end_idx + pd.Timedelta(days=1)
 
-    return pd.DataFrame(records)
+    df_out = pd.DataFrame(records)
+    if "weigh_in_protocol_controlled" in df_out.columns:
+        df_out["weigh_in_protocol_controlled"] = df_out["weigh_in_protocol_controlled"].astype(object)
+    return df_out

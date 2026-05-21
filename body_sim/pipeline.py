@@ -284,11 +284,16 @@ def rollup_body_comp(
 ) -> pd.DataFrame:
     """Aggregate body_composition to one row per day.
 
-    Columns: weight_kg (median), bf_pct (median), n_weighins.
+    Columns:
+        weight_kg                       median of all non-excluded readings
+        bf_pct                          median of all non-excluded readings
+        n_weighins                      count of non-excluded readings
+        weigh_in_protocol_controlled    True iff every non-excluded reading
+                                        that day is tagged ``controlled_morning``
 
     Multiple readings on the same day are reduced to the median for both
     weight and body-fat percentage. Days with no readings return NaN for
-    weight_kg and bf_pct and 0 for n_weighins.
+    weight_kg/bf_pct, 0 for n_weighins, False for the protocol flag.
     """
     rows = (
         session.query(BodyComposition)
@@ -313,16 +318,25 @@ def rollup_body_comp(
         if rs:
             weights = [r.weight_kg for r in rs if r.weight_kg is not None]
             bfs = [r.body_fat_pct for r in rs if r.body_fat_pct is not None]
-            records.append(
-                {
-                    "weight_kg": float(np.median(weights)) if weights else np.nan,
-                    "bf_pct": float(np.median(bfs)) if bfs else np.nan,
-                    "n_weighins": len(rs),
-                }
+            all_controlled = all(
+                r.weigh_in_protocol == "controlled_morning" for r in rs
             )
+            records.append({
+                "weight_kg": float(np.median(weights)) if weights else np.nan,
+                "bf_pct": float(np.median(bfs)) if bfs else np.nan,
+                "n_weighins": len(rs),
+                "weigh_in_protocol_controlled": bool(all_controlled),
+            })
         else:
-            records.append({"weight_kg": np.nan, "bf_pct": np.nan, "n_weighins": 0})
-    return pd.DataFrame(records, index=idx)
+            records.append({
+                "weight_kg": np.nan,
+                "bf_pct": np.nan,
+                "n_weighins": 0,
+                "weigh_in_protocol_controlled": False,
+            })
+    df = pd.DataFrame(records, index=idx)
+    df["weigh_in_protocol_controlled"] = df["weigh_in_protocol_controlled"].astype(object)
+    return df
 
 
 def rollup_rhr(

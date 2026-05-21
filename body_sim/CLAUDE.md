@@ -56,6 +56,20 @@ The rest of the body_composition history is a consistent post-void naked morning
 
 If a single methodologically-clean reading later proves to be a real outlier (illness, dehydration, hardware fault) and you want to exclude it, the same mechanism applies — get the row's `external_id` from `body_composition.external_id` and add it to the constant.
 
+## Weigh-in protocol metadata
+
+Each `body_composition` row carries a `weigh_in_protocol` string column:
+
+- `"controlled_morning"` — measured in the user's established 07:00–11:00 post-void, pre-breakfast routine on or after the cutoff date **2026-05-21**.
+- `"uncontrolled"` — any other time-of-day, any pre-cutoff weigh-in.
+- `NULL` — pre-2026-05-21 rows that haven't been backfilled yet (rare; treated as `"uncontrolled"` downstream).
+
+The classification is implemented as a pure function `body_sim.weigh_in.classify_protocol(datetime) -> Protocol`. Sync (`foodlog.services.health_sync._sync_body_composition`) applies it at upsert; the one-time backfill of pre-existing rows is `python -m body_sim.tag_weigh_ins --apply`.
+
+The daily rollup surfaces this as a `weigh_in_protocol_controlled: bool` column on `rollup_body_comp` output — `True` only if every non-excluded weigh-in that day is `controlled_morning`. The flag is propagated through `validation.forward_walk` for downstream consumers.
+
+This metadata is **soft** — not a filter. Filtering of methodologically-broken rows continues to happen via `EXCLUDED_BODY_COMP_IDS` (see "Data exclusions" above). Phase 2 (`foodlog-adu`) uses this column to assign tighter σ_obs to controlled rows in the PyMC likelihood.
+
 ## Phase 1 known limitations (open Phase 2 inputs)
 
 These came out of the Phase 1 validation run on 2026-05-19 and are documented in `foodlog-j90` notes:
