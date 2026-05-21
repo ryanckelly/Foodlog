@@ -61,6 +61,7 @@ If a single methodologically-clean reading later proves to be a real outlier (il
 Each `body_composition` row carries a `weigh_in_protocol` string column:
 
 - `"controlled_morning"` — measured in the user's established 07:00–11:00 post-void, pre-breakfast routine on or after the cutoff date **2026-05-21**.
+- `"controlled_evening"` — measured in the 19:00–22:00 evening window on or after the cutoff (added by `foodlog-dwt`).
 - `"uncontrolled"` — any other time-of-day, any pre-cutoff weigh-in.
 - `NULL` — pre-2026-05-21 rows that haven't been backfilled yet (rare; treated as `"uncontrolled"` downstream).
 
@@ -69,6 +70,25 @@ The classification is implemented as a pure function `body_sim.weigh_in.classify
 The daily rollup surfaces this as a `weigh_in_protocol_controlled: bool` column on `rollup_body_comp` output — `True` only if every non-excluded weigh-in that day is `controlled_morning`. The flag is propagated through `validation.forward_walk` for downstream consumers.
 
 This metadata is **soft** — not a filter. Filtering of methodologically-broken rows continues to happen via `EXCLUDED_BODY_COMP_IDS` (see "Data exclusions" above). Phase 2 (`foodlog-adu`) uses this column to assign tighter σ_obs to controlled rows in the PyMC likelihood.
+
+## Phase 3 diurnal model (infrastructure only)
+
+`foodlog-dwt` (closed 2026-05-21, infrastructure-only) adds the framework to model paired AM/PM weigh-ins as separate observation channels. The real-data acceptance metrics are deferred until ~30 days of paired weigh-ins exist.
+
+Architecture:
+- `body_sim/weigh_in.py` — `Protocol` literal extended to include `controlled_evening` (19:00–22:00 window after cutoff).
+- `body_sim/diurnal.py` — pure-function model: `diurnal_delta = food_in_transit + sodium_pm_water − sweat`.
+- `body_sim/model.py` — `BodyState.predicted_evening_weight_kg(...)`.
+- `body_sim/pipeline.py` — `rollup_body_comp` emits `morning_weight_kg`, `evening_weight_kg`, `diurnal_delta_kg`.
+- `body_sim/validation.py` — `forward_walk(track="morning" | "evening" | "delta")` filter; the morning track preserves prior behavior.
+- `notebooks/04_hall_baseline.ipynb` — three-track section that auto-skips when paired data is absent.
+
+Synthetic-data unit tests pass (model, diurnal, pipeline, validation). Real-data evaluation is gated by paired-weigh-in accumulation — once the user logs ~30 days of both AM and PM weigh-ins, the three-track section will produce per-track MAE / calibration and a `pearsonr` sanity check of `diurnal_delta_kg` vs intake / sodium / workout features.
+
+Open Phase-3.1 inputs once paired data exists:
+- If diurnal_delta correlates weakly with intake_kcal, the `FOOD_TRANSIT_FRACTION_AT_EVENING` coefficient (currently 0.50) is wrong for this user — refit empirically.
+- If sodium correlates strongly with the NEXT morning's weight (carryover effect), `sodium.water_kg` needs a one-day-lag term.
+- Optional Phase-3.2: extend the Bayesian fit to include a diurnal latent + observation channel.
 
 ## Phase 2 results
 

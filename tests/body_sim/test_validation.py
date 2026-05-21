@@ -95,6 +95,54 @@ def test_row_to_input_preserves_nan_intake():
     )
 
 
+def test_forward_walk_track_morning_is_default_behavior():
+    df = _synthetic_rollup(n_days=14)
+    df["morning_weight_kg"] = df["weight_kg"]
+    df["evening_weight_kg"] = np.nan
+    df["diurnal_delta_kg"] = np.nan
+    out_default = validation.forward_walk(
+        df, step_days=7, profile=DEFAULT_PROFILE, sample_n=2, seed=0,
+    )
+    out_morning = validation.forward_walk(
+        df, step_days=7, profile=DEFAULT_PROFILE, sample_n=2, seed=0, track="morning",
+    )
+    pd.testing.assert_frame_equal(out_default, out_morning)
+
+
+def test_forward_walk_track_evening_uses_evening_obs():
+    df = _synthetic_rollup(n_days=14)
+    df["morning_weight_kg"] = df["weight_kg"]
+    df["evening_weight_kg"] = df["weight_kg"] + 1.0
+    df["diurnal_delta_kg"] = 1.0
+    out = validation.forward_walk(
+        df, step_days=7, profile=DEFAULT_PROFILE, sample_n=2, seed=0, track="evening",
+    )
+    obs = out["observed_weight_kg"].dropna().unique()
+    expected = df["evening_weight_kg"].dropna().unique()
+    np.testing.assert_allclose(sorted(obs), sorted(expected), atol=1e-6)
+
+
+def test_forward_walk_track_delta_returns_diurnal_residual():
+    df = _synthetic_rollup(n_days=14)
+    df["morning_weight_kg"] = df["weight_kg"]
+    df["evening_weight_kg"] = df["weight_kg"] + 0.5
+    df["diurnal_delta_kg"] = 0.5
+    out = validation.forward_walk(
+        df, step_days=7, profile=DEFAULT_PROFILE, sample_n=2, seed=0, track="delta",
+    )
+    obs = out["observed_weight_kg"].dropna().unique()
+    np.testing.assert_allclose(obs, [0.5], atol=1e-6)
+
+
+def test_forward_walk_track_unknown_raises():
+    df = _synthetic_rollup(n_days=7)
+    with pytest.raises(ValueError, match="track"):
+        validation.forward_walk(
+            df, step_days=7, profile=DEFAULT_PROFILE, sample_n=2, seed=0,
+            track="garbage",
+        )
+
+
 def test_forward_walk_posterior_mode_smoke():
     """Posterior-mode walk requires idata and returns a DataFrame with the
     posterior-band-augmented predicted_weight_kg column."""

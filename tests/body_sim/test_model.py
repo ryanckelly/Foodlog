@@ -160,3 +160,25 @@ def test_step_rejects_zero_intake_bias(initial_state, default_inputs):
             profile=DEFAULT_PROFILE,
             parameters=bad_params,
         )
+
+
+def test_predicted_evening_weight_kg_higher_than_morning_typical_day():
+    state = model.BodyState(fat_mass_kg=18.0, lean_mass_kg=62.0)
+    morning = state.predicted_weight_kg(sodium_mg=2800.0)
+    evening = state.predicted_evening_weight_kg(
+        sodium_mg=2800.0, intake_kcal=2400.0,
+        workout_min=30, vigorous_min=10,
+    )
+    assert evening > morning, f"expected evening > morning, got {evening:.2f} <= {morning:.2f}"
+    delta = evening - morning
+    assert 0.3 < delta < 1.5, f"diurnal delta {delta:.2f} kg out of plausible range"
+
+
+def test_predicted_evening_weight_kg_lower_after_heavy_workout_low_intake():
+    state = model.BodyState(fat_mass_kg=18.0, lean_mass_kg=62.0)
+    morning = state.predicted_weight_kg(sodium_mg=1500.0)
+    evening = state.predicted_evening_weight_kg(
+        sodium_mg=1500.0, intake_kcal=1200.0,
+        workout_min=90, vigorous_min=60,
+    )
+    assert evening < morning

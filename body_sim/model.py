@@ -48,6 +48,23 @@ class BodyState:
     def body_fat_pct(self) -> float:
         return 100.0 * self.fat_mass_kg / max(0.001, self.total_mass_kg)
 
+    def predicted_evening_weight_kg(
+        self, sodium_mg: float, intake_kcal: float,
+        workout_min: int, vigorous_min: int,
+    ) -> float:
+        """Predicted evening scale reading.
+
+        Adds the diurnal model's food-in-transit + sodium PM-water - sweat
+        terms on top of the morning prediction.
+        """
+        from body_sim import diurnal
+        morning = self.predicted_weight_kg(sodium_mg)
+        delta = diurnal.predicted_diurnal_delta_kg(
+            intake_kcal=intake_kcal, sodium_mg=sodium_mg,
+            workout_min=workout_min, vigorous_min=vigorous_min,
+        )
+        return morning + delta
+
 
 # Note: `vigorous_min` is part of the input schema but not consumed at Phase 1.
 # Reserved for future MET-based intensity weighting (Phase 3+).

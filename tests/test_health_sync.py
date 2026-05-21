@@ -623,5 +623,7 @@ async def test_sync_body_composition_tags_protocol(db_session):
 
     rows_by_id = {r.external_id: r for r in db_session.query(BodyComposition).all()}
     assert rows_by_id["bc-morning-post"].weigh_in_protocol == "controlled_morning"
-    assert rows_by_id["bc-evening-post"].weigh_in_protocol == "uncontrolled"
+    # 20:00 in the evening window is controlled_evening after the foodlog-dwt
+    # enum extension; pre-cutoff rows remain uncontrolled.
+    assert rows_by_id["bc-evening-post"].weigh_in_protocol == "controlled_evening"
     assert rows_by_id["bc-morning-pre"].weigh_in_protocol == "uncontrolled"

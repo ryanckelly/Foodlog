@@ -185,3 +185,38 @@ def test_rollup_body_comp_emits_protocol_controlled_flag(session):
     assert out.loc[datetime.datetime(2026, 5, 22), "weigh_in_protocol_controlled"] is True
     assert out.loc[datetime.datetime(2026, 5, 23), "weigh_in_protocol_controlled"] is False
     assert out.loc[datetime.datetime(2026, 5, 24), "weigh_in_protocol_controlled"] is False
+
+
+def test_rollup_body_comp_emits_morning_evening_delta(session):
+    """Paired AM+PM weigh-ins produce morning/evening/delta columns; missing
+    half leaves NaN; weight_kg defaults to morning when present."""
+    session.add(BodyComposition(
+        external_id="m1", measured_at=datetime.datetime(2026, 6, 1, 9, 0),
+        weight_kg=82.0, body_fat_pct=21.0, source="test",
+        weigh_in_protocol="controlled_morning",
+    ))
+    session.add(BodyComposition(
+        external_id="e1", measured_at=datetime.datetime(2026, 6, 1, 20, 0),
+        weight_kg=83.4, body_fat_pct=21.2, source="test",
+        weigh_in_protocol="controlled_evening",
+    ))
+    session.add(BodyComposition(
+        external_id="m2", measured_at=datetime.datetime(2026, 6, 2, 9, 0),
+        weight_kg=82.1, body_fat_pct=21.0, source="test",
+        weigh_in_protocol="controlled_morning",
+    ))
+    session.commit()
+
+    out = pipeline.rollup_body_comp(
+        session, datetime.date(2026, 6, 1), datetime.date(2026, 6, 2)
+    )
+    assert out.loc[datetime.datetime(2026, 6, 1), "morning_weight_kg"] == 82.0
+    assert out.loc[datetime.datetime(2026, 6, 1), "evening_weight_kg"] == 83.4
+    assert out.loc[datetime.datetime(2026, 6, 1), "diurnal_delta_kg"] == pytest.approx(1.4)
+    assert out.loc[datetime.datetime(2026, 6, 2), "morning_weight_kg"] == 82.1
+    assert np.isnan(out.loc[datetime.datetime(2026, 6, 2), "evening_weight_kg"])
+    assert np.isnan(out.loc[datetime.datetime(2026, 6, 2), "diurnal_delta_kg"])
+    # weight_kg back-compat: prefer morning when present
+    assert out.loc[datetime.datetime(2026, 6, 1), "weight_kg"] == 82.0
+    # protocol_controlled True with mixed morning+evening (both are controlled_*)
+    assert out.loc[datetime.datetime(2026, 6, 1), "weigh_in_protocol_controlled"] is True

@@ -316,15 +316,31 @@ def rollup_body_comp(
         d = ts.date()
         rs = per_day.get(d, [])
         if rs:
-            weights = [r.weight_kg for r in rs if r.weight_kg is not None]
+            mornings = [r.weight_kg for r in rs
+                        if r.weigh_in_protocol == "controlled_morning" and r.weight_kg is not None]
+            evenings = [r.weight_kg for r in rs
+                        if r.weigh_in_protocol == "controlled_evening" and r.weight_kg is not None]
+            all_weights = [r.weight_kg for r in rs if r.weight_kg is not None]
             bfs = [r.body_fat_pct for r in rs if r.body_fat_pct is not None]
+
+            morning_kg = float(np.median(mornings)) if mornings else np.nan
+            evening_kg = float(np.median(evenings)) if evenings else np.nan
+            delta = evening_kg - morning_kg if (mornings and evenings) else np.nan
+            # weight_kg back-compat: prefer morning median; else median of all readings
+            weight_kg = morning_kg if mornings else (
+                float(np.median(all_weights)) if all_weights else np.nan
+            )
             all_controlled = all(
-                r.weigh_in_protocol == "controlled_morning" for r in rs
+                r.weigh_in_protocol in {"controlled_morning", "controlled_evening"}
+                for r in rs
             )
             records.append({
-                "weight_kg": float(np.median(weights)) if weights else np.nan,
+                "weight_kg": weight_kg,
                 "bf_pct": float(np.median(bfs)) if bfs else np.nan,
                 "n_weighins": len(rs),
+                "morning_weight_kg": morning_kg,
+                "evening_weight_kg": evening_kg,
+                "diurnal_delta_kg": delta,
                 "weigh_in_protocol_controlled": bool(all_controlled),
             })
         else:
@@ -332,6 +348,9 @@ def rollup_body_comp(
                 "weight_kg": np.nan,
                 "bf_pct": np.nan,
                 "n_weighins": 0,
+                "morning_weight_kg": np.nan,
+                "evening_weight_kg": np.nan,
+                "diurnal_delta_kg": np.nan,
                 "weigh_in_protocol_controlled": False,
             })
     df = pd.DataFrame(records, index=idx)

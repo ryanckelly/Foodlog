@@ -58,6 +58,7 @@ def forward_walk(
     seed: int | None = None,
     mode: str = "prior",
     idata=None,
+    track: str = "morning",
 ) -> pd.DataFrame:
     """Forward-walking validation over the rollup DataFrame.
 
@@ -78,10 +79,13 @@ def forward_walk(
         observed_weight_kg, fat_mass_kg, lean_mass_kg,
         weigh_in_protocol_controlled.
     """
+    if track not in {"morning", "evening", "delta"}:
+        raise ValueError(f"unknown track={track!r}; expected morning/evening/delta")
     if mode == "posterior":
         if idata is None:
             raise ValueError("mode='posterior' requires idata=")
-        return _forward_walk_posterior(df, profile, sample_n, seed, idata)
+        out = _forward_walk_posterior(df, profile, sample_n, seed, idata)
+        return _apply_track(out, df, track)
     if df.empty:
         return pd.DataFrame()
 
@@ -140,7 +144,82 @@ def forward_walk(
     df_out = pd.DataFrame(records)
     if "weigh_in_protocol_controlled" in df_out.columns:
         df_out["weigh_in_protocol_controlled"] = df_out["weigh_in_protocol_controlled"].astype(object)
-    return df_out
+    return _apply_track(df_out, df, track)
+
+
+def _apply_track(out: pd.DataFrame, source_df: pd.DataFrame, track: str) -> pd.DataFrame:
+    """Retag observed/predicted columns based on the selected track.
+
+    - "morning": no change (legacy behavior — observed is df["weight_kg"]
+      which by rollup convention is morning when available).
+    - "evening": swap observed to evening_weight_kg; recompute predicted as
+      BodyState.predicted_evening_weight_kg using each sample's final state
+      and the day's inputs.
+    - "delta": both sides become AM->PM deltas. Observed = diurnal_delta_kg;
+      predicted = diurnal.predicted_diurnal_delta_kg from the day's inputs.
+    """
+    if track == "morning" or out.empty:
+        return out
+
+    from body_sim import diurnal, model
+
+    new = out.copy()
+    if track == "evening":
+        if "evening_weight_kg" not in source_df.columns:
+            new["observed_weight_kg"] = np.nan
+        else:
+            ev = source_df["evening_weight_kg"].to_dict()
+            new["observed_weight_kg"] = new["date"].map(lambda ts: ev.get(ts, np.nan)).astype(float)
+        for i, row in new.iterrows():
+            ts = row["date"]
+            src = source_df.loc[ts]
+            state = model.BodyState(
+                fat_mass_kg=float(row["fat_mass_kg"]) if pd.notna(row["fat_mass_kg"]) else 0.0,
+                lean_mass_kg=float(row["lean_mass_kg"]) if pd.notna(row["lean_mass_kg"]) else 0.0,
+            )
+            if state.fat_mass_kg == 0.0 and state.lean_mass_kg == 0.0:
+                # Posterior mode emits NaN fat/lean; fall back to the morning prediction
+                # + diurnal delta from the source inputs as the evening prediction.
+                base = float(row["predicted_weight_kg"]) if pd.notna(row["predicted_weight_kg"]) else 0.0
+                new.at[i, "predicted_weight_kg"] = base + diurnal.predicted_diurnal_delta_kg(
+                    intake_kcal=_safe_float(src.get("intake_kcal", 0.0)),
+                    sodium_mg=_safe_float(src.get("sodium_mg", 0.0)),
+                    workout_min=_safe_int(src.get("workout_min", 0)),
+                    vigorous_min=_safe_int(src.get("vigorous_min", 0)),
+                )
+            else:
+                new.at[i, "predicted_weight_kg"] = state.predicted_evening_weight_kg(
+                    sodium_mg=_safe_float(src.get("sodium_mg", 0.0)),
+                    intake_kcal=_safe_float(src.get("intake_kcal", 0.0)),
+                    workout_min=_safe_int(src.get("workout_min", 0)),
+                    vigorous_min=_safe_int(src.get("vigorous_min", 0)),
+                )
+        return new
+
+    # track == "delta"
+    if "diurnal_delta_kg" not in source_df.columns:
+        new["observed_weight_kg"] = np.nan
+    else:
+        dd = source_df["diurnal_delta_kg"].to_dict()
+        new["observed_weight_kg"] = new["date"].map(lambda ts: dd.get(ts, np.nan)).astype(float)
+    for i, row in new.iterrows():
+        ts = row["date"]
+        src = source_df.loc[ts]
+        new.at[i, "predicted_weight_kg"] = diurnal.predicted_diurnal_delta_kg(
+            intake_kcal=_safe_float(src.get("intake_kcal", 0.0)),
+            sodium_mg=_safe_float(src.get("sodium_mg", 0.0)),
+            workout_min=_safe_int(src.get("workout_min", 0)),
+            vigorous_min=_safe_int(src.get("vigorous_min", 0)),
+        )
+    return new
+
+
+def _safe_float(v) -> float:
+    return float(v) if pd.notna(v) else 0.0
+
+
+def _safe_int(v) -> int:
+    return int(v) if pd.notna(v) else 0
 
 
 def _forward_walk_posterior(

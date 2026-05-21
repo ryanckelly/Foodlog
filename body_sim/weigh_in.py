@@ -20,7 +20,7 @@ Used by:
 import datetime
 from typing import Literal
 
-Protocol = Literal["controlled_morning", "uncontrolled"]
+Protocol = Literal["controlled_morning", "controlled_evening", "uncontrolled"]
 
 # Date the user committed to consistent morning weigh-ins. Same morning slot
 # applied retroactively is NOT trusted — there's no record of whether the
@@ -30,26 +30,27 @@ WEIGH_IN_PROTOCOL_CUTOFF: datetime.date = datetime.date(2026, 5, 21)
 
 MORNING_HOUR_LO: int = 7
 MORNING_HOUR_HI: int = 11
+EVENING_HOUR_LO: int = 19
+EVENING_HOUR_HI: int = 22
+
+
+def _in_window(hour: int, minute: int, lo: int, hi: int) -> bool:
+    """Return True if (hour:minute) falls in [lo:00, hi:00] inclusive on both ends."""
+    if hour < lo or hour > hi:
+        return False
+    if hour == hi and minute > 0:
+        return False
+    return True
 
 
 def classify_protocol(measured_at: datetime.datetime) -> Protocol:
-    """Return the protocol label for a weigh-in datetime.
-
-    Args:
-        measured_at: timezone-naive local datetime of the weigh-in.
-
-    Returns:
-        ``"controlled_morning"`` if on/after the cutoff and within the
-        morning hour window; ``"uncontrolled"`` otherwise.
-    """
+    """Return the protocol label for a weigh-in datetime."""
     if measured_at.date() < WEIGH_IN_PROTOCOL_CUTOFF:
         return "uncontrolled"
     hour = measured_at.hour
     minute = measured_at.minute
-    if hour < MORNING_HOUR_LO:
-        return "uncontrolled"
-    if hour > MORNING_HOUR_HI:
-        return "uncontrolled"
-    if hour == MORNING_HOUR_HI and minute > 0:
-        return "uncontrolled"
-    return "controlled_morning"
+    if _in_window(hour, minute, MORNING_HOUR_LO, MORNING_HOUR_HI):
+        return "controlled_morning"
+    if _in_window(hour, minute, EVENING_HOUR_LO, EVENING_HOUR_HI):
+        return "controlled_evening"
+    return "uncontrolled"

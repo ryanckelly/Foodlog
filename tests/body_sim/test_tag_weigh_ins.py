@@ -17,18 +17,20 @@ def _make_row(external_id: str, measured_at: datetime.datetime) -> BodyCompositi
 
 
 def test_backfill_tags_existing_rows(session):
-    session.add(_make_row("a", datetime.datetime(2026, 5, 22, 9, 30)))  # controlled
-    session.add(_make_row("b", datetime.datetime(2026, 5, 22, 20, 0)))  # uncontrolled
-    session.add(_make_row("c", datetime.datetime(2026, 5, 10, 9, 30)))  # pre-cutoff
+    session.add(_make_row("a", datetime.datetime(2026, 5, 22, 9, 30)))  # controlled_morning
+    session.add(_make_row("b", datetime.datetime(2026, 5, 22, 20, 0)))  # controlled_evening
+    session.add(_make_row("c", datetime.datetime(2026, 5, 22, 14, 0)))  # uncontrolled (midday)
+    session.add(_make_row("d", datetime.datetime(2026, 5, 10, 9, 30)))  # uncontrolled (pre-cutoff)
     session.commit()
 
     n_updated = backfill_protocol(session, dry_run=False)
-    assert n_updated == 3
+    assert n_updated == 4
 
     rows = {r.external_id: r for r in session.query(BodyComposition).all()}
     assert rows["a"].weigh_in_protocol == "controlled_morning"
-    assert rows["b"].weigh_in_protocol == "uncontrolled"
+    assert rows["b"].weigh_in_protocol == "controlled_evening"
     assert rows["c"].weigh_in_protocol == "uncontrolled"
+    assert rows["d"].weigh_in_protocol == "uncontrolled"
 
 
 def test_backfill_is_idempotent(session):
