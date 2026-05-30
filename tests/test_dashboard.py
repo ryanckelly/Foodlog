@@ -9,7 +9,15 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from foodlog.config import settings
-from foodlog.db.models import DailyActivity, GoogleOAuthToken
+from foodlog.db.models import (
+    DailyActivity,
+    DailyHrv,
+    DailyRespiratoryOxygen,
+    DailySleepTemperature,
+    GoogleOAuthToken,
+    RestingHeartRate,
+    SleepSession,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -143,6 +151,74 @@ def test_feed_connected_renders_movement_section(health_raw_client, db_session):
     # Happy path: no stale / rate-limited banner text.
     assert "rate limited" not in resp.text
     assert "sync failed" not in resp.text
+
+
+def _seed_recovery_night(db_session, date, *, nightly_temp_c=33.1, baseline_temp_c=32.8):
+    """Seed a full overnight-recovery set (sleep stages + HRV + SpO2/resp +
+    skin temp) for one civil date so the Sleep & Recovery card has data."""
+    start = datetime.datetime.combine(date, datetime.time(2, 30))
+    db_session.add(SleepSession(
+        external_id=f"sl-{date}", start_at=start,
+        end_at=start + datetime.timedelta(minutes=552), duration_min=552,
+        source="watch", sleep_type="STAGES", stages_status="SUCCEEDED",
+        awake_min=13, light_min=265, deep_min=130, rem_min=143, asleep_min=538,
+    ))
+    db_session.add(RestingHeartRate(
+        measured_at=start, bpm=52, source="watch",
+        external_id=f"rhr-{date}",
+    ))
+    db_session.add(DailyHrv(
+        date=date, avg_hrv_ms=47.0, deep_sleep_rmssd_ms=39.8, non_rem_hr_bpm=58,
+        entropy=3.05, source="watch", external_id=f"hrv-{date}",
+    ))
+    db_session.add(DailyRespiratoryOxygen(
+        date=date, breaths_per_min=11.8, spo2_avg_pct=94.4, spo2_low_pct=90.2,
+        spo2_high_pct=96.2, spo2_std_pct=0.9, source="watch",
+        external_id=f"ro-{date}",
+    ))
+    db_session.add(DailySleepTemperature(
+        date=date, nightly_temp_c=nightly_temp_c, baseline_temp_c=baseline_temp_c,
+        relative_stddev_30d_c=0.8, source="watch", external_id=f"tmp-{date}",
+    ))
+    db_session.commit()
+
+
+def test_feed_renders_sleep_recovery_card(health_raw_client, db_session):
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    _seed_recovery_night(db_session, datetime.date.today())
+    _seed_recent_sync()
+
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    text = resp.text
+    assert "Recovery" in text                 # card title grew to Sleep & Recovery
+    assert "deep" in text.lower() and "130" in text   # stage breakdown
+    assert "143" in text                      # rem minutes
+    assert "47" in text                       # avg HRV ms
+    assert "SpO" in text or "spo2" in text.lower()    # blood oxygen surfaced
+    assert "12" in text                       # respiratory rate (11.8 → 12)
+    # Normal skin-temp night (z ≈ +0.4σ): no unusual-temp warning.
+    assert "unusual" not in text.lower()
+
+
+def test_feed_flags_unusual_skin_temp_night(health_raw_client, db_session):
+    """When (nightly - baseline) / relative_stddev_30d_c crosses the z
+    threshold, the card shows an elevated-skin-temp flag (illness/alcohol)."""
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    # deviation = 2.4 C over a 0.8 C stddev → z = +3.0σ → unusual.
+    _seed_recovery_night(
+        db_session, datetime.date.today(),
+        nightly_temp_c=35.2, baseline_temp_c=32.8,
+    )
+    _seed_recent_sync()
+
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    assert "unusual" in resp.text.lower()
 
 
 def test_feed_rate_limited_shows_rate_limited_banner(health_raw_client, db_session):

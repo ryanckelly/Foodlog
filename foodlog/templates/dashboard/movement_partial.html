@@ -36,12 +36,49 @@
 
       {% if sleep %}
         <div class="mv-card">
-          <div class="mv-card-title">Sleep last night</div>
-          <div class="mv-card-big">{{ (sleep.duration_min // 60) }}h {{ "%02d"|format(sleep.duration_min % 60) }}m</div>
-          <div class="mv-card-sub">
-            {% if sleep.duration_min < 420 %}below 7h target{% else %}on target{% endif %}
-            {% if sleep.resting_hr %} · resting hr {{ sleep.resting_hr }}{% endif %}
+          <div class="mv-card-title">Sleep &amp; Recovery</div>
+          <div class="mv-card-big">{{ (sleep.duration_min // 60) }}h {{ "%02d"|format(sleep.duration_min % 60) }}m
+            <span class="mv-card-sub">{% if sleep.duration_min < 420 %}below 7h target{% else %}on target{% endif %}</span>
           </div>
+
+          {% set deep = sleep.get('deep_min') %}
+          {% set light = sleep.get('light_min') %}
+          {% set rem = sleep.get('rem_min') %}
+          {% set awake = sleep.get('awake_min') or 0 %}
+          {% if deep is not none and light is not none and rem is not none %}
+            {% set stage_total = deep + light + rem + awake %}
+            {% if stage_total > 0 %}
+              <div class="mv-stage-bar" aria-hidden="true">
+                <span class="st-deep"  style="width:{{ (100 * deep / stage_total)|round(1) }}%"></span>
+                <span class="st-rem"   style="width:{{ (100 * rem / stage_total)|round(1) }}%"></span>
+                <span class="st-light" style="width:{{ (100 * light / stage_total)|round(1) }}%"></span>
+                <span class="st-awake" style="width:{{ (100 * awake / stage_total)|round(1) }}%"></span>
+              </div>
+              <div class="mv-card-sub">deep {{ deep }}m · rem {{ rem }}m · light {{ light }}m{% if awake %} · awake {{ awake }}m{% endif %}</div>
+            {% endif %}
+          {% endif %}
+
+          {% set hrv = sleep.get('avg_hrv_ms') %}
+          {% set resp = sleep.get('breaths_per_min') %}
+          {% if hrv or sleep.get('resting_hr') or resp %}
+            <div class="mv-divider"></div>
+            <div class="mv-recovery">
+              {%- set parts = [] -%}
+              {%- if hrv %}{% set _ = parts.append("HRV " ~ (hrv|round|int) ~ "ms") %}{% endif -%}
+              {%- if sleep.get('resting_hr') %}{% set _ = parts.append("rest HR " ~ sleep.get('resting_hr')) %}{% endif -%}
+              {%- if resp %}{% set _ = parts.append("resp " ~ (resp|round|int) ~ "/min") %}{% endif -%}
+              {{ parts|join(" · ") }}
+            </div>
+          {% endif %}
+
+          {% set spo2 = sleep.get('spo2_avg_pct') %}
+          {% if spo2 %}
+            <div class="mv-card-sub">SpO₂ {{ spo2|round|int }}%{% if sleep.get('spo2_low_pct') %} (low {{ sleep.get('spo2_low_pct')|round|int }}%){% endif %}{% if spo2 < 94 %} <span class="mv-flag">⚠ low</span>{% endif %}</div>
+          {% endif %}
+
+          {% if sleep.get('skin_temp_unusual') %}
+            <div class="mv-flag">⚠ unusual skin temp{% if sleep.get('skin_temp_delta_c') is not none %} ({{ "%+.1f"|format(sleep.get('skin_temp_delta_c')) }}°C vs baseline){% endif %}</div>
+          {% endif %}
         </div>
       {% endif %}
 

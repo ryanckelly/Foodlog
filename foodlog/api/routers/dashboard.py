@@ -16,6 +16,9 @@ from foodlog.config import settings
 from foodlog.db.models import (
     BodyComposition,
     DailyActivity,
+    DailyHrv,
+    DailyRespiratoryOxygen,
+    DailySleepTemperature,
     GoogleOAuthToken,
     RestingHeartRate,
     SleepSession,
@@ -174,11 +177,48 @@ def _build_movement_context(db: Session, start_date, end_date) -> dict:
                  .filter(RestingHeartRate.measured_at >= start_dt,
                          RestingHeartRate.measured_at < end_dt)
                  .order_by(RestingHeartRate.measured_at.desc()).first())
+    # Overnight-recovery metrics (all keyed by civil date, ~60-67% nightly
+    # coverage on Pixel Watch). Each is the most recent row in the period — we
+    # surface them on the sleep card as "last night" alongside the session.
+    # Pure local reads; nothing here hits Google (see render-path contract).
+    hrv = (db.query(DailyHrv)
+             .filter(DailyHrv.date >= start_date, DailyHrv.date <= end_date)
+             .order_by(DailyHrv.date.desc()).first())
+    ro = (db.query(DailyRespiratoryOxygen)
+            .filter(DailyRespiratoryOxygen.date >= start_date,
+                    DailyRespiratoryOxygen.date <= end_date)
+            .order_by(DailyRespiratoryOxygen.date.desc()).first())
+    temp = (db.query(DailySleepTemperature)
+              .filter(DailySleepTemperature.date >= start_date,
+                      DailySleepTemperature.date <= end_date)
+              .order_by(DailySleepTemperature.date.desc()).first())
+
     sleep_view = None
     if sleep is not None:
+        # Skin-temp "unusual night" signal. relative_stddev_30d_c is the user's
+        # 30-day stddev (≈constant ~0.8 C in practice — it is NOT the per-night
+        # deviation, despite the field name), so the actual z-score is
+        # (nightly - baseline) / stddev. |z| >= 2 flags illness/alcohol.
+        temp_z = None
+        if (temp is not None and temp.nightly_temp_c is not None
+                and temp.baseline_temp_c is not None
+                and temp.relative_stddev_30d_c):
+            temp_z = (temp.nightly_temp_c - temp.baseline_temp_c) / temp.relative_stddev_30d_c
         sleep_view = {
             "duration_min": sleep.duration_min,
             "resting_hr": resting.bpm if resting else None,
+            "deep_min": sleep.deep_min,
+            "light_min": sleep.light_min,
+            "rem_min": sleep.rem_min,
+            "awake_min": sleep.awake_min,
+            "asleep_min": sleep.asleep_min,
+            "avg_hrv_ms": hrv.avg_hrv_ms if hrv else None,
+            "breaths_per_min": ro.breaths_per_min if ro else None,
+            "spo2_avg_pct": ro.spo2_avg_pct if ro else None,
+            "spo2_low_pct": ro.spo2_low_pct if ro else None,
+            "skin_temp_delta_c": (temp.nightly_temp_c - temp.baseline_temp_c)
+                                 if temp_z is not None else None,
+            "skin_temp_unusual": temp_z is not None and abs(temp_z) >= 2,
         }
 
     # `body_composition` holds Google Health weight points and body-fat points

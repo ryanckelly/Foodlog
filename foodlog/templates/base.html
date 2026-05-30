@@ -419,6 +419,23 @@
             opacity: 0.75;
             border-radius: 1px;
         }
+        /* Sleep-stage bar: grayscale segments (deep darkest → awake faintest)
+           to stay on-system without introducing a new accent color. */
+        .mv-stage-bar {
+            display: flex;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 2px;
+        }
+        .mv-stage-bar span { display: block; height: 100%; }
+        .mv-stage-bar .st-deep  { background: rgba(0,0,0,0.95); }
+        .mv-stage-bar .st-rem   { background: rgba(0,0,0,0.55); }
+        .mv-stage-bar .st-light { background: rgba(0,0,0,0.28); }
+        .mv-stage-bar .st-awake { background: rgba(0,0,0,0.10); }
+        .mv-divider { height: 1px; background: var(--hairline); margin: 4px 0; }
+        .mv-recovery { font-size: 13px; color: var(--ink-soft); font-weight: 500; }
+        .mv-flag { font-size: 12px; font-weight: 600; color: var(--metric-hr); }
 
         /* ── Connect page ────────────────────────────────────── */
         .connect-prompt {
