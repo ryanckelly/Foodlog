@@ -79,8 +79,7 @@ bd close <id>         # Complete work
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd dolt push
-   git push
+   git push    # beads issues live in .beads/issues.jsonl — committing + pushing is what persists them (no Dolt remote configured)
    git status  # MUST show "up to date with origin"
    ```
 5. **Clean up** - Clear stashes, prune remote branches
