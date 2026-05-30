@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from foodlog.clients.google_health import GoogleHealthClient, RateLimited, GoogleHealthError
 from foodlog.db.models import (
     BodyComposition,
+    DailyActiveMinutes,
     DailyActivity,
     DailyHrv,
     DailyRespiratoryOxygen,
@@ -101,6 +102,7 @@ class HealthSyncService:
                 logger.exception("health sync crashed on %s (continuing)", name)
 
         await _run("daily_activity", self._sync_daily_activity)
+        await _run("daily_active_minutes", self._sync_daily_active_minutes)
         await _run("body_composition", self._sync_body_composition)
         await _run("resting_heart_rate", self._sync_resting_hr)
         await _run("daily_hrv", self._sync_daily_hrv)
@@ -168,6 +170,14 @@ class HealthSyncService:
             self._db.execute(stmt)
         self._db.commit()
         return len(rows)
+
+    async def _sync_daily_active_minutes(self) -> int:
+        # active-minutes is pre-aggregated per civil day; same date-keyed
+        # upsert shape as the other daily aggregate tables.
+        return await self._sync_daily_keyed(
+            DailyActiveMinutes, self._client.list_daily_active_minutes,
+            ("light_min", "moderate_min", "vigorous_min"),
+        )
 
     async def _sync_body_composition(self) -> int:
         from body_sim.weigh_in import classify_protocol

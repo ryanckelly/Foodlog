@@ -555,3 +555,47 @@ async def test_synthesises_external_id_when_name_missing(http):
         assert len(rows) == 1
         assert rows[0].external_id.startswith("sleep|")
         assert "Pixel Watch 3" in rows[0].external_id
+
+
+async def test_list_daily_active_minutes_parses_levels(http):
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.post(url__regex=r".*/active-minutes/dataPoints:dailyRollUp.*").mock(
+            return_value=httpx.Response(200, json=_load("daily_active_minutes.json"))
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_daily_active_minutes(
+            since=datetime.datetime(2026, 5, 17),
+            until=datetime.datetime(2026, 5, 19),
+        )]
+        by_date = {r.date: r for r in rows}
+        assert set(by_date) == {datetime.date(2026, 5, 18), datetime.date(2026, 5, 17)}
+
+        full = by_date[datetime.date(2026, 5, 18)]
+        assert full.light_min == 92
+        assert full.moderate_min == 5
+        assert full.vigorous_min == 17
+        assert full.source == "Pixel Watch 3"
+        assert full.external_id == "daily-active-minutes|2026-05-18"
+
+        # Day with only LIGHT present → other levels stay None, not 0.
+        partial = by_date[datetime.date(2026, 5, 17)]
+        assert partial.light_min == 63
+        assert partial.moderate_min is None
+        assert partial.vigorous_min is None
+
+
+async def test_list_daily_active_minutes_skips_points_with_no_known_levels(http):
+    with respx.mock(base_url="https://health.googleapis.com") as mock:
+        mock.post(url__regex=r".*/active-minutes/dataPoints:dailyRollUp.*").mock(
+            return_value=httpx.Response(200, json={"rollupDataPoints": [{
+                "civilStartTime": {"date": {"year": 2026, "month": 5, "day": 18}, "time": {}},
+                "activeMinutes": {"activeMinutesRollupByActivityLevel": [
+                    {"activityLevel": "UNKNOWN_FUTURE_LEVEL", "activeMinutesSum": "10"}
+                ]},
+            }]})
+        )
+        client = GoogleHealthClient(http, access_token="test")
+        rows = [r async for r in client.list_daily_active_minutes(
+            since=datetime.datetime(2026, 5, 18),
+        )]
+        assert rows == []

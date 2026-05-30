@@ -47,6 +47,7 @@ DATA_TYPES = {
     "daily_sleep_temperature": "daily-sleep-temperature-derivations",
     "daily_oxygen_saturation": "daily-oxygen-saturation",
     "daily_respiratory_rate": "daily-respiratory-rate",
+    "active_minutes": "active-minutes",
 }
 
 # Per-endpoint filter grammar for the `list` action. Each entry:
@@ -105,6 +106,16 @@ class DailyActivityRow:
     steps: int
     active_calories_kcal: float  # NB: holds total-calories (total daily EE); misnomer, see efy.6
     active_energy_kcal: float | None  # activity-only burn from active-energy-burned
+    source: str
+
+
+@dataclass(slots=True)
+class DailyActiveMinutesRow:
+    external_id: str
+    date: datetime.date
+    light_min: int | None
+    moderate_min: int | None
+    vigorous_min: int | None
     source: str
 
 
@@ -510,6 +521,60 @@ class GoogleHealthClient:
                 active_calories_kcal=calories_by_date.get(d, 0.0),
                 active_energy_kcal=active_energy_by_date.get(d),
                 source=source,
+            )
+
+    async def list_daily_active_minutes(
+        self, since: datetime.datetime, until: datetime.datetime | None = None,
+    ) -> AsyncIterator[DailyActiveMinutesRow]:
+        """Per-day active minutes by intensity level via dailyRollUp.
+
+        Google pre-aggregates this: each rollup point is one civil day with an
+        ``activeMinutesRollupByActivityLevel`` list of {activityLevel, sum}.
+        Levels are LIGHT / MODERATE / VIGOROUS (no SEDENTARY — active-minutes
+        only counts active time). Only the levels that occurred on a day are
+        present, so absent levels stay None. activeMinutesSum is a string int.
+
+        Using the rollup (not raw 1-min `activity-level` samples) is deliberate:
+        the raw type would be ~1440 points/day, and Google already does the
+        grouping for us. Confirmed live 2026-05-19 via scripts/probe_report.json.
+        """
+        start_date = since.date()
+        end_date = (until.date() if until else datetime.date.today())
+
+        _LEVEL_FIELD = {
+            "LIGHT": "light_min",
+            "MODERATE": "moderate_min",
+            "VIGOROUS": "vigorous_min",
+        }
+        for pt in await self._daily_rollup(
+            DATA_TYPES["active_minutes"], start_date, end_date,
+        ):
+            try:
+                d = _parse_civil_date((pt.get("civilStartTime") or {}).get("date") or {})
+            except (KeyError, ValueError, TypeError):
+                logger.warning("google-health active-minutes rollup malformed: %r", pt)
+                continue
+            mins: dict[str, int | None] = {
+                "light_min": None, "moderate_min": None, "vigorous_min": None,
+            }
+            rollup = (pt.get("activeMinutes") or {}).get(
+                "activeMinutesRollupByActivityLevel"
+            ) or []
+            for entry in rollup:
+                field = _LEVEL_FIELD.get(entry.get("activityLevel"))
+                value = _parse_int_string(entry.get("activeMinutesSum"))
+                if field is not None and value is not None:
+                    mins[field] = value
+            # Skip days where Google returned the point but no recognized levels.
+            if all(v is None for v in mins.values()):
+                continue
+            yield DailyActiveMinutesRow(
+                external_id=_synth_id("daily-active-minutes", d.isoformat()),
+                date=d,
+                light_min=mins["light_min"],
+                moderate_min=mins["moderate_min"],
+                vigorous_min=mins["vigorous_min"],
+                source=_source_from(pt.get("dataSource")),
             )
 
     async def list_body_composition(

@@ -185,6 +185,28 @@ class DailyActivity(Base):
     )
 
 
+class DailyActiveMinutes(Base):
+    """One row per civil date — minutes spent at each Google "active minutes"
+    intensity level, pre-aggregated by Google's ``active-minutes`` dailyRollUp.
+
+    Levels mirror Google's vocabulary (LIGHT / MODERATE / VIGOROUS); there is no
+    SEDENTARY bucket because active-minutes only counts active time. All three
+    columns are nullable: Google emits only the levels that occurred on a day.
+    Fed to the body-sim NEAT / activity-bias work (phase-3); see foodlog-mc9.
+    """
+    __tablename__ = "daily_active_minutes"
+
+    date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    light_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    moderate_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vigorous_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
 class BodyComposition(Base):
     __tablename__ = "body_composition"
 

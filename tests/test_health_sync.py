@@ -5,6 +5,7 @@ import pytest
 
 from foodlog.clients.google_health import (
     BodyCompositionRow,
+    DailyActiveMinutesRow,
     DailyActivityRow,
     DailyHrvRow,
     DailyRespiratoryRateRow,
@@ -17,6 +18,7 @@ from foodlog.clients.google_health import (
 )
 from foodlog.db.models import (
     BodyComposition,
+    DailyActiveMinutes,
     DailyActivity,
     DailyHrv,
     DailyRespiratoryOxygen,
@@ -56,6 +58,7 @@ def client():
             source="renpho",
         )
     ])
+    c.list_daily_active_minutes = lambda *a, **kw: _collect([])
     c.list_resting_heart_rate = lambda *a, **kw: _collect([])
     c.list_daily_hrv = lambda *a, **kw: _collect([])
     c.list_daily_sleep_temperature = lambda *a, **kw: _collect([])
@@ -546,6 +549,8 @@ async def test_sync_all_includes_interval_metrics(db_session):
     class StubClient:
         async def list_daily_activity(self, since, until=None):
             return; yield  # empty generator
+        async def list_daily_active_minutes(self, since, until=None):
+            return; yield
         async def list_body_composition(self, since, until=None):
             return; yield
         async def list_resting_heart_rate(self, since, until=None):
@@ -611,6 +616,7 @@ async def test_sync_body_composition_tags_protocol(db_session):
     ]
     c.list_body_composition = lambda *a, **kw: _collect(rows)
     c.list_daily_activity = lambda *a, **kw: _collect([])
+    c.list_daily_active_minutes = lambda *a, **kw: _collect([])
     c.list_resting_heart_rate = lambda *a, **kw: _collect([])
     c.list_daily_hrv = lambda *a, **kw: _collect([])
     c.list_daily_sleep_temperature = lambda *a, **kw: _collect([])
@@ -629,3 +635,60 @@ async def test_sync_body_composition_tags_protocol(db_session):
     # enum extension; pre-cutoff rows remain uncontrolled.
     assert rows_by_id["bc-evening-post"].weigh_in_protocol == "controlled_evening"
     assert rows_by_id["bc-morning-pre"].weigh_in_protocol == "uncontrolled"
+
+
+@pytest.mark.asyncio
+async def test_sync_daily_active_minutes_persists_levels(db_session):
+    """active-minutes sync: writes present levels; absent levels stay None."""
+    full = DailyActiveMinutesRow(
+        external_id="daily-active-minutes|2026-05-18",
+        date=datetime.date(2026, 5, 18),
+        light_min=92, moderate_min=5, vigorous_min=17, source="Pixel Watch 3",
+    )
+    sparse = DailyActiveMinutesRow(
+        external_id="daily-active-minutes|2026-05-17",
+        date=datetime.date(2026, 5, 17),
+        light_min=63, moderate_min=None, vigorous_min=None, source="Pixel Watch 3",
+    )
+
+    class StubClient:
+        async def list_daily_active_minutes(self, since, until=None):
+            yield full
+            yield sparse
+
+    sync = HealthSyncService(db_session, StubClient())
+    n = await sync._sync_daily_active_minutes()
+    assert n == 2
+    rows = {r.date: r for r in db_session.query(DailyActiveMinutes).all()}
+    assert rows[datetime.date(2026, 5, 18)].light_min == 92
+    assert rows[datetime.date(2026, 5, 18)].vigorous_min == 17
+    assert rows[datetime.date(2026, 5, 17)].light_min == 63
+    assert rows[datetime.date(2026, 5, 17)].moderate_min is None
+
+
+@pytest.mark.asyncio
+async def test_sync_daily_active_minutes_upserts_on_date_conflict(db_session):
+    initial = DailyActiveMinutesRow(
+        external_id="x", date=datetime.date(2026, 5, 10),
+        light_min=40, moderate_min=10, vigorous_min=0, source="watch",
+    )
+    revised = DailyActiveMinutesRow(
+        external_id="x", date=datetime.date(2026, 5, 10),
+        light_min=55, moderate_min=12, vigorous_min=3, source="watch",
+    )
+
+    class StubClient:
+        def __init__(self, row):
+            self._row = row
+
+        async def list_daily_active_minutes(self, since, until=None):
+            yield self._row
+
+    svc = HealthSyncService(db_session, StubClient(initial))
+    await svc._sync_daily_active_minutes()
+    svc._client = StubClient(revised)
+    await svc._sync_daily_active_minutes()
+
+    row = db_session.query(DailyActiveMinutes).one()
+    assert row.light_min == 55
+    assert row.vigorous_min == 3

@@ -35,6 +35,7 @@ Direct Renpho → Google Fit is also no longer a working path (Google Fit is bei
 | Type | Window each sync | Why |
 |---|---|---|
 | `daily_activity` | Yesterday + today, always re-fetched | Daily totals can change late as the watch backfills minute-level samples |
+| `daily_active_minutes` | Cursor: `max(date)` → now (90 d on empty table) | One row per civil date; Google pre-aggregates via `active-minutes` dailyRollUp |
 | `body_composition` | Cursor: `max(measured_at)` → now (90 d on empty table) | Each weigh-in is a fresh row; cursor walk is sufficient |
 | `resting_heart_rate` | Cursor: `max(measured_at)` → now (90 d on empty table) | One row per day; cursor walk is sufficient |
 | `daily_hrv` | Cursor: `max(date)` → now (90 d on empty table) | One row per day; list-only (no rollup) — see v4 quirks |
@@ -52,6 +53,7 @@ The full set of data FoodLog pulls today, in one place. Detail tables follow bel
 |---|---|---|---|---|---|
 | Steps | Pixel Watch | `steps` (dailyRollUp) | One total per civil date | Yesterday + today | `daily_activity` |
 | Active calories | Pixel Watch | `total-calories` (dailyRollUp) | One total per civil date | Yesterday + today | `daily_activity` |
+| Active minutes by intensity | Pixel Watch | `active-minutes` (dailyRollUp) | One row per civil date: light/moderate/vigorous minutes (no SEDENTARY — Google omits it) | Cursor; 90 d on first sync | `daily_active_minutes` |
 | Weight | Renpho scale (via Fitbit relay) | `weight` | Per weigh-in sample | Cursor; 90 d on first sync | `body_composition` |
 | Body fat % | (none in practice) | `body-fat` | Code wired but Google has no data — see below | Cursor; 90 d on first sync | `body_composition` |
 | Resting heart rate | Pixel Watch | `daily-resting-heart-rate` | One bpm per civil date | Cursor; 90 d on first sync | `resting_heart_rate` |
@@ -83,8 +85,9 @@ Legend:
 | Distance | `distance` | Interval samples | No | — | — |
 | Floors climbed | `floors` | Interval samples | No | — | — |
 | Altitude | `altitude` | Interval samples | No | — | — |
-| Active minutes / AZM | `active-minutes`, `active-zone-minutes` | Interval | No | — | — |
-| Activity level | `activity-level` | Interval categorical | No | — | — |
+| Active minutes | `active-minutes` | `dailyRollUp` (pre-grouped by level) | Yes (rollup) | One row per civil date: light/moderate/vigorous min | `daily_active_minutes` |
+| AZM (active-zone-minutes) | `active-zone-minutes` | rollUp `900s` | Yes (rollup) | 15-min by HR zone | `interval_azm` |
+| Activity level | `activity-level` | Interval categorical (1-min) | No — superseded by `active-minutes` dailyRollUp, which Google pre-aggregates (no need to store ~1440 samples/day) | — | — |
 | Sedentary periods | `sedentary-period` | Interval | No | — | — |
 | Basal energy burned | `basal-energy-burned` | kcal | No | — | — |
 | Heart rate (continuous) | `heart-rate` | Per-sample (~1/sec during workouts) | Workout-window only | Per-sample inside a workout | `workout_hr_samples` |

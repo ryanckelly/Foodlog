@@ -1,0 +1,38 @@
+{
+  "rollupDataPoints": [
+    {
+      "civilStartTime": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "time": {}
+      },
+      "civilEndTime": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "time": {"hours": 23, "minutes": 59, "seconds": 59}
+      },
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "activeMinutes": {
+        "activeMinutesRollupByActivityLevel": [
+          {"activityLevel": "LIGHT", "activeMinutesSum": "92"},
+          {"activityLevel": "MODERATE", "activeMinutesSum": "5"},
+          {"activityLevel": "VIGOROUS", "activeMinutesSum": "17"}
+        ]
+      }
+    },
+    {
+      "civilStartTime": {
+        "date": {"year": 2026, "month": 5, "day": 17},
+        "time": {}
+      },
+      "civilEndTime": {
+        "date": {"year": 2026, "month": 5, "day": 18},
+        "time": {}
+      },
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "activeMinutes": {
+        "activeMinutesRollupByActivityLevel": [
+          {"activityLevel": "LIGHT", "activeMinutesSum": "63"}
+        ]
+      }
+    }
+  ]
+}
