@@ -202,7 +202,7 @@ def timeline(
         {
             "name": m.food_name,
             "meal_type": m.meal_type,
-            "left_pct": _pct_of_day(m.logged_at),
+            "left_pct": _pct_of_day(m.effective_at),
         }
         for m in meals
     ]

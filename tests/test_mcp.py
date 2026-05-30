@@ -464,3 +464,33 @@ def test_resolve_range_caps_max_window():
 
     with pytest.raises(ValueError, match="Range exceeds"):
         _resolve_range("2025-01-01", "2026-05-01", default_lookback_days=7)
+
+
+def test_parse_consumed_at_none_and_empty():
+    from mcp_server.server import _parse_consumed_at
+
+    assert _parse_consumed_at(None) is None
+    assert _parse_consumed_at("") is None
+
+
+def test_parse_consumed_at_iso_and_datetime_passthrough():
+    from mcp_server.server import _parse_consumed_at
+
+    dt = datetime.datetime(2026, 5, 30, 12, 30)
+    assert _parse_consumed_at(dt) == dt
+    assert _parse_consumed_at("2026-05-30T12:30:00") == dt
+
+
+def test_parse_consumed_at_bare_clock_time_uses_today():
+    from mcp_server.server import _parse_consumed_at
+
+    now = datetime.datetime(2026, 5, 30, 20, 0)
+    assert _parse_consumed_at("12:30", now=now) == datetime.datetime(2026, 5, 30, 12, 30)
+
+
+def test_parse_consumed_at_relative_phrases():
+    from mcp_server.server import _parse_consumed_at
+
+    now = datetime.datetime(2026, 5, 30, 20, 0)
+    assert _parse_consumed_at("30 minutes ago", now=now) == now - datetime.timedelta(minutes=30)
+    assert _parse_consumed_at("2 hours ago", now=now) == now - datetime.timedelta(hours=2)

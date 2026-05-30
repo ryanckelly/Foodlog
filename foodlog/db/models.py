@@ -28,12 +28,26 @@ class FoodEntry(Base):
     source: Mapped[str] = mapped_column(String(20))
     source_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     raw_input: Mapped[str] = mapped_column(Text)
+    # Shared token for all items written by a single log_food call. Nullable for
+    # rows predating the column; backfilled best-effort by clustering logged_at
+    # within 5s windows (see backfill_submission_ids). Lets batch analysis be
+    # exact instead of heuristic. (foodlog-b1f)
+    submission_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # True time the food was eaten, when known; NULL means "not provided" and
+    # callers fall back to logged_at. Kept distinct from logged_at so the gap
+    # between the two (logging latency) stays observable. (foodlog-fkn)
+    consumed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     logged_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
+
+    @property
+    def effective_at(self) -> datetime.datetime:
+        """When the food was eaten: consumed_at if known, else logged_at."""
+        return self.consumed_at or self.logged_at
 
 
 class OAuthClient(Base):

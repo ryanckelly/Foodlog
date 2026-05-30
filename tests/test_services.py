@@ -66,6 +66,67 @@ def test_create_multiple_entries():
     assert results[1].food_name == "White Rice"
 
 
+def test_create_many_shares_one_submission_id():
+    session = make_session()
+    svc = EntryService(session)
+    results = svc.create_many([sample_entry(), sample_entry()])
+    ids = {r.submission_id for r in results}
+    assert len(ids) == 1
+    assert results[0].submission_id is not None
+
+
+def test_separate_calls_get_distinct_submission_ids():
+    session = make_session()
+    svc = EntryService(session)
+    a = svc.create(sample_entry())
+    b = svc.create(sample_entry())
+    assert a.submission_id != b.submission_id
+
+
+def test_consumed_at_persists_and_falls_back_to_logged_at():
+    session = make_session()
+    svc = EntryService(session)
+
+    eaten = datetime.datetime(2026, 5, 30, 12, 30, 0)
+    data = sample_entry()
+    data.consumed_at = eaten
+    with_consumed = svc.create(data)
+    assert with_consumed.consumed_at == eaten
+    assert with_consumed.effective_at == eaten
+
+    without = svc.create(sample_entry())
+    assert without.consumed_at is None
+    assert without.effective_at == without.logged_at
+
+
+def test_backfill_submission_ids_clusters_by_time_window():
+    from foodlog.services.logging import backfill_submission_ids
+
+    session = make_session()
+    base = datetime.datetime(2026, 5, 1, 8, 0, 0)
+    # Two rows microseconds apart (one batch), a third 10s later (separate batch).
+    times = [base, base + datetime.timedelta(seconds=0.001), base + datetime.timedelta(seconds=10)]
+    for t in times:
+        row = FoodEntry(
+            meal_type="breakfast", food_name="x", quantity=1.0, unit="serving",
+            calories=1.0, protein_g=0.0, carbs_g=0.0, fat_g=0.0,
+            source="test", raw_input="x", logged_at=t,
+        )
+        session.add(row)
+    session.commit()
+
+    updated = backfill_submission_ids(session, window_s=5.0)
+    assert updated == 3
+
+    rows = session.query(FoodEntry).order_by(FoodEntry.logged_at).all()
+    assert rows[0].submission_id == rows[1].submission_id
+    assert rows[2].submission_id != rows[0].submission_id
+    assert all(r.submission_id for r in rows)
+
+    # Idempotent: a second pass touches nothing (all rows already grouped).
+    assert backfill_submission_ids(session) == 0
+
+
 def test_get_entries_by_date():
     session = make_session()
     svc = EntryService(session)

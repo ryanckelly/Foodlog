@@ -342,13 +342,22 @@ async def feed_partial(
         entries = entry_svc.get_by_range(start_date, end_date)
         summary = summary_svc.range(start_date, end_date)
 
-    entries.sort(key=lambda x: x.logged_at, reverse=True)
+    entries.sort(key=lambda x: x.effective_at, reverse=True)
+
+    def _same_batch(entry, group) -> bool:
+        # Exact grouping when both rows carry a submission_id (post foodlog-b1f);
+        # otherwise fall back to the legacy 5-minute same-meal time-window cluster.
+        if entry.submission_id and group["submission_id"]:
+            return entry.submission_id == group["submission_id"]
+        time_diff = abs((entry.effective_at - group["logged_at"]).total_seconds())
+        return entry.meal_type == group["meal_type"] and time_diff < 300
 
     grouped_entries = []
     if entries:
         current_group = {
             "meal_type": entries[0].meal_type,
-            "logged_at": entries[0].logged_at,
+            "submission_id": entries[0].submission_id,
+            "logged_at": entries[0].effective_at,
             "entries": [entries[0]],
             "total_calories": entries[0].calories,
             "total_protein_g": entries[0].protein_g,
@@ -356,8 +365,7 @@ async def feed_partial(
             "total_fat_g": entries[0].fat_g,
         }
         for entry in entries[1:]:
-            time_diff = abs((entry.logged_at - current_group["logged_at"]).total_seconds())
-            if entry.meal_type == current_group["meal_type"] and time_diff < 300:
+            if _same_batch(entry, current_group):
                 current_group["entries"].append(entry)
                 current_group["total_calories"] += entry.calories
                 current_group["total_protein_g"] += entry.protein_g
@@ -367,7 +375,8 @@ async def feed_partial(
                 grouped_entries.append(current_group)
                 current_group = {
                     "meal_type": entry.meal_type,
-                    "logged_at": entry.logged_at,
+                    "submission_id": entry.submission_id,
+                    "logged_at": entry.effective_at,
                     "entries": [entry],
                     "total_calories": entry.calories,
                     "total_protein_g": entry.protein_g,

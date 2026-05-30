@@ -28,6 +28,7 @@ class FoodEntryCreate(BaseModel):
     source_id: str | None = None
     raw_input: str
     logged_at: datetime.datetime | None = None
+    consumed_at: datetime.datetime | None = None
 
 
 class FoodEntryUpdate(BaseModel):
@@ -42,6 +43,7 @@ class FoodEntryUpdate(BaseModel):
     fat_g: float | None = Field(default=None, ge=0)
     source: str | None = None
     source_id: str | None = None
+    consumed_at: datetime.datetime | None = None
 
 
 class FoodEntryResponse(BaseModel):
@@ -61,6 +63,8 @@ class FoodEntryResponse(BaseModel):
     source: str
     source_id: str | None
     raw_input: str
+    submission_id: str | None = None
+    consumed_at: datetime.datetime | None = None
     logged_at: datetime.datetime
     created_at: datetime.datetime
 

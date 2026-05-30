@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import (
@@ -72,6 +73,45 @@ def _resolve_range(
     if span > MAX_RANGE_DAYS:
         raise ValueError(f"Range exceeds {MAX_RANGE_DAYS} days (got {span})")
     return start, end
+
+
+_RELATIVE_RE = re.compile(r"^\s*(\d+)\s*(min|minute|minutes|h|hr|hour|hours)\s+ago\s*$", re.I)
+
+
+def _parse_consumed_at(value, now: datetime.datetime | None = None) -> datetime.datetime | None:
+    """Normalize a user-supplied consumption time into a datetime.
+
+    Accepts: a datetime (passthrough), ISO 8601 strings, "HH:MM" (today at that
+    clock time), and relative forms like "30 minutes ago" / "2 hours ago".
+    Returns None for None/empty so the row falls back to logged_at.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"Unsupported consumed_at value: {value!r}")
+
+    text = value.strip()
+    now = now or datetime.datetime.now()
+
+    m = _RELATIVE_RE.match(text)
+    if m:
+        amount = int(m.group(1))
+        unit = m.group(2).lower()
+        delta = (
+            datetime.timedelta(hours=amount)
+            if unit.startswith("h")
+            else datetime.timedelta(minutes=amount)
+        )
+        return now - delta
+
+    # Bare clock time "HH:MM" (optionally with seconds) → today at that time.
+    if re.match(r"^\d{1,2}:\d{2}(:\d{2})?$", text):
+        t = datetime.time.fromisoformat(text if text.count(":") == 2 else text + ":00")
+        return datetime.datetime.combine(now.date(), t)
+
+    return datetime.datetime.fromisoformat(text)
 
 
 def _require_scope(scope: str) -> None:
@@ -188,15 +228,28 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
         Use after searching to include accurate nutrition data.
         Include the original user description in raw_input.
 
+        All items in a single call share one submission_id so they can later be
+        grouped as one meal exactly. Pass consumed_at on an item to record when
+        the food was actually eaten (vs. when it was logged).
+
         Args:
             entries: Array of food entry objects. Each must include:
                 meal_type (breakfast/lunch/dinner/snack), food_name, quantity,
                 unit, calories, protein_g, carbs_g, fat_g, source, raw_input.
-                Optional: weight_g, source_id, fiber_g, sugar_g, sodium_mg.
+                Optional: weight_g, source_id, fiber_g, sugar_g, sodium_mg,
+                consumed_at. consumed_at accepts an ISO timestamp, a bare clock
+                time ("12:30" → today), or a relative phrase ("30 minutes ago",
+                "2 hours ago"); omit it if the food was just eaten.
         """
         _require_scope("foodlog.write")
         session_factory = get_session_factory_cached()
-        models = [FoodEntryCreate.model_validate(e) for e in entries]
+        normalized = []
+        for e in entries:
+            e = dict(e)
+            if "consumed_at" in e:
+                e["consumed_at"] = _parse_consumed_at(e["consumed_at"])
+            normalized.append(e)
+        models = [FoodEntryCreate.model_validate(e) for e in normalized]
         with session_factory() as session:
             svc = EntryService(session)
             results = svc.create_many(models)

@@ -12,8 +12,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from foodlog.api.dependencies import cleanup_http_client, get_session_factory_cached
 from foodlog.config import settings
-from foodlog.db.database import ensure_columns, get_engine
+from foodlog.db.database import ensure_columns, get_engine, get_session_factory
 from foodlog.db.models import Base
+from foodlog.services.logging import backfill_submission_ids
 from foodlog.services.oauth import FOODLOG_SCOPES, FoodLogOAuthProvider, FoodLogTokenVerifier
 from mcp_server.server import create_mcp_server
 
@@ -60,6 +61,14 @@ def create_app() -> FastAPI:
         ensure_columns(engine, "daily_activity", {
             "active_energy_kcal": "FLOAT",
         })
+        ensure_columns(engine, "food_entries", {
+            "submission_id": "VARCHAR(64)",
+            "consumed_at": "DATETIME",
+        })
+        # Group legacy food rows into best-effort batches so submission_id is
+        # populated everywhere. Idempotent: only touches NULL rows.
+        with get_session_factory(engine)() as session:
+            backfill_submission_ids(session)
 
         # Start MCP session manager (required for streamable_http_app to work)
         async with mcp.session_manager.run():
