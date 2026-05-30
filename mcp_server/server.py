@@ -292,9 +292,17 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
     def get_daily_activity(
         start_date: str | None = None, end_date: str | None = None
     ) -> dict:
-        """Get daily step counts and active calories burned from synced health data.
+        """Get daily steps and energy expenditure from synced health data.
 
         Sourced from Google Health (Fitbit, Wear OS, etc.). Defaults to today only.
+
+        Energy fields (both kcal, Fitbit-derived):
+        - active_calories_kcal: TOTAL daily energy expenditure (resting metabolism
+          + activity ≈ 2000-3300/day). Despite the name, this is NOT activity-only;
+          it's the right number for energy balance (intake - this = surplus/deficit).
+        - active_energy_kcal: activity-only burn above resting (≈ 100-1000/day), or
+          null on days with no reading. This is the true "active calories".
+        (The active_calories_kcal name is a known misnomer pending rename.)
 
         Args:
             start_date: Inclusive start date YYYY-MM-DD (default: end_date)
@@ -316,6 +324,7 @@ def create_mcp_server(auth_server_provider=None, token_verifier=None) -> FastMCP
                         "date": r.date.isoformat(),
                         "steps": r.steps,
                         "active_calories_kcal": r.active_calories_kcal,
+                        "active_energy_kcal": r.active_energy_kcal,
                         "source": r.source,
                     }
                     for r in rows

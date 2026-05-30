@@ -151,6 +151,7 @@ class HealthSyncService:
                 date=row.date,
                 steps=row.steps,
                 active_calories_kcal=row.active_calories_kcal,
+                active_energy_kcal=row.active_energy_kcal,
                 source=row.source,
                 external_id=row.external_id,
             )
@@ -159,6 +160,7 @@ class HealthSyncService:
                 set_=dict(
                     steps=row.steps,
                     active_calories_kcal=row.active_calories_kcal,
+                    active_energy_kcal=row.active_energy_kcal,
                     source=row.source,
                     external_id=row.external_id,
                 ),

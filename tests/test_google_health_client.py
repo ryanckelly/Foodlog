@@ -28,6 +28,9 @@ async def test_list_daily_activity_returns_normalized_rows(http):
         mock.post(url__regex=r".*/total-calories/dataPoints:dailyRollUp.*").mock(
             return_value=httpx.Response(200, json=_load("total_calories_rollup.json"))
         )
+        mock.post(url__regex=r".*/active-energy-burned/dataPoints:dailyRollUp.*").mock(
+            return_value=httpx.Response(200, json=_load("active_energy_rollup.json"))
+        )
         client = GoogleHealthClient(http, access_token="test")
         rows = [r async for r in client.list_daily_activity(
             since=datetime.datetime(2026, 4, 20),
@@ -36,7 +39,10 @@ async def test_list_daily_activity_returns_normalized_rows(http):
         assert len(rows) == 1
         assert rows[0].date == datetime.date(2026, 4, 22)
         assert rows[0].steps == 8432
+        # active_calories_kcal currently holds total-calories (misnomer; see efy.6)
         assert rows[0].active_calories_kcal == pytest.approx(512.5)
+        # active_energy_kcal is the real activity-only burn (active-energy-burned)
+        assert rows[0].active_energy_kcal == pytest.approx(287.4)
         assert rows[0].source == "Pixel Watch 3"
         assert rows[0].external_id == "daily-activity|2026-04-22"
 
@@ -50,6 +56,10 @@ async def test_list_daily_activity_handles_calories_only(http):
         mock.post(url__regex=r".*/total-calories/dataPoints:dailyRollUp.*").mock(
             return_value=httpx.Response(200, json=_load("total_calories_rollup.json"))
         )
+        # No active-energy-burned data this day → active_energy_kcal should be None.
+        mock.post(url__regex=r".*/active-energy-burned/dataPoints:dailyRollUp.*").mock(
+            return_value=httpx.Response(200, json={"rollupDataPoints": []})
+        )
         client = GoogleHealthClient(http, access_token="test")
         rows = [r async for r in client.list_daily_activity(
             since=datetime.datetime(2026, 4, 20),
@@ -58,6 +68,7 @@ async def test_list_daily_activity_handles_calories_only(http):
         assert len(rows) == 1
         assert rows[0].steps == 0
         assert rows[0].active_calories_kcal == pytest.approx(512.5)
+        assert rows[0].active_energy_kcal is None
 
 
 async def test_list_body_composition_returns_normalized_rows(http):

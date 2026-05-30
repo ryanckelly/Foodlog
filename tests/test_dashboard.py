@@ -153,6 +153,27 @@ def test_feed_connected_renders_movement_section(health_raw_client, db_session):
     assert "sync failed" not in resp.text
 
 
+def test_feed_activity_card_shows_active_and_total_energy(health_raw_client, db_session):
+    """active_calories_kcal holds total expenditure; active_energy_kcal is the
+    real activity-only burn. The card must show both, not label total 'active'."""
+    _login_health(health_raw_client)
+    _seed_google_token(db_session)
+    db_session.add(DailyActivity(
+        date=datetime.date.today(), steps=8432,
+        active_calories_kcal=2705.0,      # total daily expenditure
+        active_energy_kcal=552.0,         # activity-only
+        source="watch", external_id="da-today",
+    ))
+    db_session.commit()
+    _seed_recent_sync()
+
+    resp = health_raw_client.get("/dashboard/feed?date_range=today")
+
+    assert resp.status_code == 200
+    assert "552 kcal active" in resp.text
+    assert "2,705 kcal total" in resp.text or "2705 kcal total" in resp.text
+
+
 def _seed_recovery_night(db_session, date, *, nightly_temp_c=33.1, baseline_temp_c=32.8):
     """Seed a full overnight-recovery set (sleep stages + HRV + SpO2/resp +
     skin temp) for one civil date so the Sleep & Recovery card has data."""

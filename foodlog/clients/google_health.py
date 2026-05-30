@@ -36,6 +36,7 @@ API_VERSION = "v4"
 DATA_TYPES = {
     "daily_steps": "steps",
     "daily_active_calories": "total-calories",
+    "daily_active_energy": "active-energy-burned",
     "body_weight": "weight",
     "body_fat": "body-fat",
     "resting_heart_rate": "daily-resting-heart-rate",
@@ -102,7 +103,8 @@ class DailyActivityRow:
     external_id: str
     date: datetime.date
     steps: int
-    active_calories_kcal: float
+    active_calories_kcal: float  # NB: holds total-calories (total daily EE); misnomer, see efy.6
+    active_energy_kcal: float | None  # activity-only burn from active-energy-burned
     source: str
 
 
@@ -480,13 +482,33 @@ class GoogleHealthClient:
                 logger.warning("google-health total-calories rollup malformed: %r", pt)
                 continue
 
-        for d in sorted(steps_by_date.keys() | calories_by_date.keys()):
+        # active-energy-burned: the activity-only burn (above resting), distinct
+        # from total-calories above. Same dailyRollUp shape; value under
+        # `activeEnergyBurned.kcalSum`. Provisional field name — final naming &
+        # whether the body-sim consumes it is decided in efy.6.
+        active_energy_by_date: dict[datetime.date, float] = {}
+        for pt in await self._daily_rollup(
+            DATA_TYPES["daily_active_energy"], start_date, end_date,
+        ):
+            try:
+                d = _parse_civil_date((pt.get("civilStartTime") or {}).get("date") or {})
+                ae = pt.get("activeEnergyBurned") or {}
+                kcal = ae.get("kcalSum") or ae.get("energyKcalSum") or ae.get("kcal")
+                if kcal is not None:
+                    active_energy_by_date[d] = float(kcal)
+            except (KeyError, ValueError, TypeError):
+                logger.warning("google-health active-energy-burned rollup malformed: %r", pt)
+                continue
+
+        all_dates = steps_by_date.keys() | calories_by_date.keys() | active_energy_by_date.keys()
+        for d in sorted(all_dates):
             steps_val, source = steps_by_date.get(d, (0, ""))
             yield DailyActivityRow(
                 external_id=_synth_id("daily-activity", d.isoformat()),
                 date=d,
                 steps=steps_val,
                 active_calories_kcal=calories_by_date.get(d, 0.0),
+                active_energy_kcal=active_energy_by_date.get(d),
                 source=source,
             )
 

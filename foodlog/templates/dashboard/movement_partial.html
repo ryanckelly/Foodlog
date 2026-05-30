@@ -13,7 +13,8 @@
           <div class="mv-card-title">Steps</div>
           <div class="mv-card-big">{{ "{:,}".format(activity.steps) }}</div>
           <div class="mv-card-sub">
-            {% if activity.calories_kcal %}{{ activity.calories_kcal|round|int }} kcal active{% endif %}
+            {% if activity.active_energy_kcal %}{{ activity.active_energy_kcal|round|int }} kcal active · {% endif %}
+            {% if activity.calories_kcal %}{{ activity.calories_kcal|round|int }} kcal total{% endif %}
           </div>
         </div>
       {% endif %}

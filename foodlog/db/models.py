@@ -158,7 +158,12 @@ class DailyActivity(Base):
 
     date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
     steps: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NB: active_calories_kcal currently holds total-calories (total daily energy
+    # expenditure ≈ BMR + active), not activity-only burn — a misnomer kept for
+    # now to avoid churn. active_energy_kcal is the real activity-only burn
+    # (Google active-energy-burned). Final naming + body-sim use decided in efy.6.
     active_calories_kcal: Mapped[float] = mapped_column(Float, nullable=False)
+    active_energy_kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(128), nullable=False)
     external_id: Mapped[str] = mapped_column(String(255), nullable=False)
     fetched_at: Mapped[datetime.datetime] = mapped_column(

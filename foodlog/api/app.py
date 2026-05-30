@@ -57,6 +57,9 @@ def create_app() -> FastAPI:
         ensure_columns(engine, "body_composition", {
             "weigh_in_protocol": "VARCHAR(32)",
         })
+        ensure_columns(engine, "daily_activity", {
+            "active_energy_kcal": "FLOAT",
+        })
 
         # Start MCP session manager (required for streamable_http_app to work)
         async with mcp.session_manager.run():

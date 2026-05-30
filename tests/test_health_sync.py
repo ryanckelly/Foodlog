@@ -43,6 +43,7 @@ def client():
             date=datetime.date(2026, 4, 22),
             steps=8432,
             active_calories_kcal=512.0,
+            active_energy_kcal=287.4,
             source="watch",
         )
     ])
@@ -111,6 +112,7 @@ async def test_sync_updates_existing_row_on_conflict(db_session, client):
             date=datetime.date(2026, 4, 22),
             steps=9000,
             active_calories_kcal=540.0,
+            active_energy_kcal=301.0,
             source="watch",
         )
     ])

@@ -1,0 +1,16 @@
+{
+  "rollupDataPoints": [
+    {
+      "civilStartTime": {
+        "date": {"year": 2026, "month": 4, "day": 22},
+        "time": {}
+      },
+      "civilEndTime": {
+        "date": {"year": 2026, "month": 4, "day": 22},
+        "time": {"hours": 23, "minutes": 59, "seconds": 59}
+      },
+      "dataSource": {"device": {"displayName": "Pixel Watch 3"}, "platform": "FITBIT"},
+      "activeEnergyBurned": {"kcalSum": 287.4}
+    }
+  ]
+}

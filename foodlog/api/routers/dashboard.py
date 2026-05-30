@@ -257,7 +257,12 @@ def _build_movement_context(db: Session, start_date, end_date) -> dict:
     activity = (db.query(DailyActivity)
                   .filter(DailyActivity.date >= start_date,
                           DailyActivity.date <= end_date).all())
+    # active_calories_kcal holds TOTAL daily expenditure (misnomer, see efy.6) —
+    # that's the correct figure for net energy balance below. active_energy_kcal
+    # is the real activity-only burn we now surface separately on the card.
     total_burned = sum(a.active_calories_kcal for a in activity) if activity else None
+    active_energy = (sum(a.active_energy_kcal for a in activity if a.active_energy_kcal is not None)
+                     if activity else None) or None
     total_steps = sum(a.steps for a in activity) if activity else 0
     # Steps "card" shows when there's activity for the period. Distinct from
     # the net-calories pill in the summary strip (which is aggregate).
@@ -266,6 +271,7 @@ def _build_movement_context(db: Session, start_date, end_date) -> dict:
         activity_view = {
             "steps": total_steps,
             "calories_kcal": total_burned or 0,
+            "active_energy_kcal": active_energy,
         }
     return {
         "workouts": workout_views,
