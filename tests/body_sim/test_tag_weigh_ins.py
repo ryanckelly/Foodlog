@@ -17,9 +17,11 @@ def _make_row(external_id: str, measured_at: datetime.datetime) -> BodyCompositi
 
 
 def test_backfill_tags_existing_rows(session):
+    # Scheme B (foodlog-aou): cutoff-only — any post-cutoff reading is
+    # controlled_morning regardless of time-of-day; pre-cutoff is uncontrolled.
     session.add(_make_row("a", datetime.datetime(2026, 5, 22, 9, 30)))  # controlled_morning
-    session.add(_make_row("b", datetime.datetime(2026, 5, 22, 20, 0)))  # controlled_evening
-    session.add(_make_row("c", datetime.datetime(2026, 5, 22, 14, 0)))  # uncontrolled (midday)
+    session.add(_make_row("b", datetime.datetime(2026, 5, 22, 20, 0)))  # controlled_morning (post-cutoff)
+    session.add(_make_row("c", datetime.datetime(2026, 5, 22, 14, 0)))  # controlled_morning (post-cutoff)
     session.add(_make_row("d", datetime.datetime(2026, 5, 10, 9, 30)))  # uncontrolled (pre-cutoff)
     session.commit()
 
@@ -28,8 +30,8 @@ def test_backfill_tags_existing_rows(session):
 
     rows = {r.external_id: r for r in session.query(BodyComposition).all()}
     assert rows["a"].weigh_in_protocol == "controlled_morning"
-    assert rows["b"].weigh_in_protocol == "controlled_evening"
-    assert rows["c"].weigh_in_protocol == "uncontrolled"
+    assert rows["b"].weigh_in_protocol == "controlled_morning"
+    assert rows["c"].weigh_in_protocol == "controlled_morning"
     assert rows["d"].weigh_in_protocol == "uncontrolled"
 
 

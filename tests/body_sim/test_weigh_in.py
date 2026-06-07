@@ -5,7 +5,17 @@ import pytest
 from body_sim import weigh_in
 
 
-def test_controlled_morning_after_cutoff():
+# Scheme B (foodlog-aou): the protocol label is gated SOLELY by the cutoff date.
+# Every reading on/after WEIGH_IN_PROTOCOL_CUTOFF is the user's trusted daily
+# routine reading -> "controlled_morning". Time-of-day is NOT consulted: the
+# user takes one disciplined morning weigh-in a day, and the rare off-time /
+# clothed reading is dropped via pipeline.EXCLUDED_BODY_COMP_IDS, not by a clock
+# window. This replaces the old 07:00-11:00 window, which compared a naive-UTC
+# timestamp against a local-time-intent window and mislabeled every real
+# weigh-in as uncontrolled.
+
+
+def test_controlled_after_cutoff_morning():
     dt = datetime.datetime(2026, 5, 22, 9, 30)
     assert weigh_in.classify_protocol(dt) == "controlled_morning"
 
@@ -15,39 +25,32 @@ def test_uncontrolled_before_cutoff_even_if_morning():
     assert weigh_in.classify_protocol(dt) == "uncontrolled"
 
 
-def test_evening_after_cutoff_is_controlled_evening():
-    """Evening in the 19:00-22:00 window after cutoff is controlled_evening
-    (foodlog-dwt extension). Outside that window remains uncontrolled."""
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 19, 0)) == "controlled_evening"
-    # Midday afternoon is still uncontrolled
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 15, 0)) == "uncontrolled"
-    # Very late evening is uncontrolled
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 23, 30)) == "uncontrolled"
-
-
-def test_boundary_hours_inclusive():
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 7, 0)) == "controlled_morning"
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 11, 0)) == "controlled_morning"
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 6, 59)) == "uncontrolled"
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 5, 22, 11, 1)) == "uncontrolled"
-
-
-def test_boundary_date_inclusive():
+def test_cutoff_date_itself_is_controlled():
     dt = datetime.datetime(2026, 5, 21, 9, 0)
     assert weigh_in.classify_protocol(dt) == "controlled_morning"
 
 
-def test_controlled_evening_after_cutoff():
-    dt = datetime.datetime(2026, 6, 1, 20, 0)
-    assert weigh_in.classify_protocol(dt) == "controlled_evening"
+def test_time_of_day_does_not_matter_after_cutoff():
+    """The defining property of scheme B: post-cutoff, ANY time-of-day is the
+    trusted routine reading. No clock window, so no timezone/DST sensitivity."""
+    for hour in (0, 6, 7, 9, 11, 12, 15, 19, 20, 22, 23):
+        dt = datetime.datetime(2026, 5, 22, hour, 30)
+        assert weigh_in.classify_protocol(dt) == "controlled_morning", (
+            f"hour={hour} should be controlled post-cutoff under scheme B"
+        )
 
 
-def test_evening_boundary_hours_inclusive():
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 6, 1, 19, 0)) == "controlled_evening"
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 6, 1, 22, 0)) == "controlled_evening"
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 6, 1, 18, 59)) == "uncontrolled"
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 6, 1, 22, 1)) == "uncontrolled"
+def test_no_controlled_evening_emitted():
+    """classify_protocol never emits controlled_evening under scheme B; the
+    evening window was part of the abandoned diurnal design. (The literal value
+    is retained in the Protocol type only for backward compat with rollup code
+    that still recognizes pre-existing controlled_evening rows.)"""
+    for hour in (19, 20, 21, 22):
+        dt = datetime.datetime(2026, 6, 1, hour, 0)
+        assert weigh_in.classify_protocol(dt) != "controlled_evening"
+        assert weigh_in.classify_protocol(dt) == "controlled_morning"
 
 
-def test_midday_is_uncontrolled():
-    assert weigh_in.classify_protocol(datetime.datetime(2026, 6, 1, 14, 0)) == "uncontrolled"
+def test_just_before_cutoff_is_uncontrolled():
+    dt = datetime.datetime(2026, 5, 20, 23, 59)
+    assert weigh_in.classify_protocol(dt) == "uncontrolled"

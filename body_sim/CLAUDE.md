@@ -58,25 +58,31 @@ If a single methodologically-clean reading later proves to be a real outlier (il
 
 ## Weigh-in protocol metadata
 
-Each `body_composition` row carries a `weigh_in_protocol` string column:
+Each `body_composition` row carries a `weigh_in_protocol` string column. Classification uses **scheme B — cutoff-date only** (`foodlog-aou`, 2026-06-06):
 
-- `"controlled_morning"` — measured in the user's established 07:00–11:00 post-void, pre-breakfast routine on or after the cutoff date **2026-05-21**.
-- `"controlled_evening"` — measured in the 19:00–22:00 evening window on or after the cutoff (added by `foodlog-dwt`).
-- `"uncontrolled"` — any other time-of-day, any pre-cutoff weigh-in.
-- `NULL` — pre-2026-05-21 rows that haven't been backfilled yet (rare; treated as `"uncontrolled"` downstream).
+- `"controlled_morning"` — **any** reading on or after the cutoff date **2026-05-21**, regardless of time-of-day. The user takes one disciplined morning weigh-in per day (post-void, pre-breakfast, consistent clothing); a post-cutoff reading is assumed to be that routine reading.
+- `"uncontrolled"` — any pre-cutoff weigh-in.
+- `"controlled_evening"` — **no longer emitted.** Retained in the `Protocol` literal only so rollup code that still recognizes pre-existing rows keeps type-checking. It was part of the abandoned AM/PM diurnal design (`foodlog-dwt`).
+- `NULL` — un-backfilled rows; treated as `"uncontrolled"` downstream.
 
-The classification is implemented as a pure function `body_sim.weigh_in.classify_protocol(datetime) -> Protocol`. Sync (`foodlog.services.health_sync._sync_body_composition`) applies it at upsert; the one-time backfill of pre-existing rows is `python -m body_sim.tag_weigh_ins --apply`.
+> ### ⚠️ Forget-proofing: why there is NO time-of-day window
+>
+> **If you change your weigh-in routine — different time of day, or more than one weigh-in per day — this classifier will silently mislabel the off-protocol readings as `controlled_morning` and the Phase-2 fit will over-trust them.** Scheme B trusts *everything* post-cutoff. The fix when that happens: either add the bad rows to `EXCLUDED_BODY_COMP_IDS` (preferred for one-offs), or set a new `WEIGH_IN_PROTOCOL_CUTOFF`.
+>
+> **Do NOT "fix" this by reintroducing a clock window.** That was the original design and it was buggy: it compared a **naive-UTC** `measured_at` (normalized in `google_health.py`) against a `07:00–11:00` window written with **local-time (Atlantic)** intent. The user's 08:00–09:00 ADT weigh-ins land at 11:00–12:00 UTC — just past the window — so every real weigh-in was tagged `uncontrolled`, feeding the user's *cleanest* data the loose `sigma_obs_uncontrolled` (0.8) instead of `sigma_obs_controlled` (0.3). An empirical A/B (timezone-corrected window vs. cutoff-only) gave **identical labels on all real data**; the window only mattered for hypothetical off-time post-cutoff readings that don't occur. So the window was deleted, not repaired. If you ever genuinely need per-reading time discrimination, convert UTC → `zoneinfo("America/Halifax")` *first* — but prefer the exclusion list.
+
+The classification is the pure function `body_sim.weigh_in.classify_protocol(datetime) -> Protocol`. Sync (`foodlog.services.health_sync._sync_body_composition`) applies it at upsert; backfill existing rows with `python -m body_sim.tag_weigh_ins --apply` (add `--force` to overwrite rows mislabeled under the old window logic).
 
 The daily rollup surfaces this as a `weigh_in_protocol_controlled: bool` column on `rollup_body_comp` output — `True` only if every non-excluded weigh-in that day is `controlled_morning`. The flag is propagated through `validation.forward_walk` for downstream consumers.
 
-This metadata is **soft** — not a filter. Filtering of methodologically-broken rows continues to happen via `EXCLUDED_BODY_COMP_IDS` (see "Data exclusions" above). Phase 2 (`foodlog-adu`) uses this column to assign tighter σ_obs to controlled rows in the PyMC likelihood.
+This metadata is **soft** — not a filter. Filtering of methodologically-broken rows continues to happen via `EXCLUDED_BODY_COMP_IDS` (see "Data exclusions" above). Phase 2 (`foodlog-adu`) uses this column to assign tighter σ_obs to controlled rows in the PyMC likelihood — empirically, correctly tagging the post-cutoff block sharpened `sigma_obs_controlled` from its 0.24 prior mean to **0.13** (the model learns the standardized weigh-ins are tight) while `sigma_obs_uncontrolled` rose to 0.69 (the scattered pre-cutoff readings are correctly isolated as noisy).
 
 ## Phase 3 diurnal model (infrastructure only)
 
 `foodlog-dwt` (closed 2026-05-21, infrastructure-only) adds the framework to model paired AM/PM weigh-ins as separate observation channels. The real-data acceptance metrics are deferred until ~30 days of paired weigh-ins exist.
 
 Architecture:
-- `body_sim/weigh_in.py` — `Protocol` literal extended to include `controlled_evening` (19:00–22:00 window after cutoff).
+- `body_sim/weigh_in.py` — `Protocol` literal still includes `controlled_evening`, but as of `foodlog-aou` (scheme B) `classify_protocol` **no longer emits it** — the evening clock window was removed along with the morning one. This whole diurnal stack is dormant infrastructure (the user takes single morning weigh-ins, not AM/PM pairs); a future teardown bead can remove it. See "Weigh-in protocol metadata" above.
 - `body_sim/diurnal.py` — pure-function model: `diurnal_delta = food_in_transit + sodium_pm_water − sweat`.
 - `body_sim/model.py` — `BodyState.predicted_evening_weight_kg(...)`.
 - `body_sim/pipeline.py` — `rollup_body_comp` emits `morning_weight_kg`, `evening_weight_kg`, `diurnal_delta_kg`.

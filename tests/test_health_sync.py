@@ -594,8 +594,9 @@ async def test_sync_all_includes_interval_metrics(db_session):
 
 
 async def test_sync_body_composition_tags_protocol(db_session):
-    """Sync-time heuristic: morning post-cutoff -> controlled_morning;
-    evening post-cutoff or pre-cutoff -> uncontrolled."""
+    """Sync-time heuristic (scheme B, foodlog-aou): any post-cutoff reading is
+    the trusted daily routine reading -> controlled_morning regardless of
+    time-of-day; pre-cutoff -> uncontrolled."""
     c = MagicMock()
     rows = [
         BodyCompositionRow(
@@ -631,9 +632,10 @@ async def test_sync_body_composition_tags_protocol(db_session):
 
     rows_by_id = {r.external_id: r for r in db_session.query(BodyComposition).all()}
     assert rows_by_id["bc-morning-post"].weigh_in_protocol == "controlled_morning"
-    # 20:00 in the evening window is controlled_evening after the foodlog-dwt
-    # enum extension; pre-cutoff rows remain uncontrolled.
-    assert rows_by_id["bc-evening-post"].weigh_in_protocol == "controlled_evening"
+    # Scheme B is cutoff-only: a 20:00 post-cutoff reading is still tagged
+    # controlled_morning (no clock window). Off-time readings are excluded at
+    # the source via EXCLUDED_BODY_COMP_IDS, not demoted by time-of-day.
+    assert rows_by_id["bc-evening-post"].weigh_in_protocol == "controlled_morning"
     assert rows_by_id["bc-morning-pre"].weigh_in_protocol == "uncontrolled"
 
 

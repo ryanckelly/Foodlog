@@ -1,20 +1,42 @@
 """Weigh-in protocol classification.
 
-A weigh-in is ``controlled_morning`` if it falls in the consistent morning
-routine (07:00–11:00 inclusive, post-void, pre-breakfast) on or after the
-cutoff date the user committed to the protocol. Everything else is
-``uncontrolled`` — variable hydration / gut state, possibly clothed,
-possibly post-meal.
+Scheme B (foodlog-aou, 2026-06-06): a weigh-in is ``controlled_morning`` iff it
+falls on or after ``WEIGH_IN_PROTOCOL_CUTOFF`` — the date the user committed to a
+consistent once-daily morning routine (post-void, pre-breakfast, consistent
+clothing). Everything before the cutoff is ``uncontrolled``. **Time-of-day is
+deliberately not consulted.**
 
-This metadata is soft. Excluded outliers (clothes-on, off-time evening
-weigh-ins) are handled by ``pipeline.EXCLUDED_BODY_COMP_IDS`` and don't
-appear here.
+Why no clock window (this is the important part — see the warning in
+``body_sim/CLAUDE.md`` before changing it):
+
+- The user takes exactly one disciplined weigh-in per day. A clock window adds
+  no signal over the cutoff gate for that pattern.
+- The previous implementation compared a *naive-UTC* ``measured_at`` against a
+  07:00–11:00 window written with *local-time* intent. The user's 08:00–09:00
+  Atlantic weigh-ins land at 11:00–12:00 UTC — just past the window — so every
+  real weigh-in was mislabeled ``uncontrolled``, silently feeding the Phase-2
+  fit the loose ``sigma_obs_uncontrolled`` for the user's *cleanest* data.
+- An empirical A/B (timezone-corrected window vs. cutoff-only) produced
+  identical labels on all real data; the window only ever mattered for
+  hypothetical off-time post-cutoff readings, which don't occur.
+
+The trade made by scheme B: a stray off-time / clothed reading taken *after* the
+cutoff is trusted as ``controlled_morning`` by default. Such readings are
+dropped at the source via ``pipeline.EXCLUDED_BODY_COMP_IDS`` (manual), not by a
+clock window. **If the weigh-in routine changes (different time of day, or
+multiple weigh-ins per day), revisit this** — either exclude the off-protocol
+rows or set a new cutoff. See ``body_sim/CLAUDE.md`` § "Weigh-in protocol
+metadata".
+
+This metadata is soft. ``controlled_evening`` is retained in the ``Protocol``
+type for backward compatibility with rollup code that still recognizes
+pre-existing rows, but ``classify_protocol`` never emits it.
 
 Used by:
 - ``foodlog.services.health_sync._sync_body_composition`` to tag new rows
 - ``body_sim.tag_weigh_ins`` to backfill existing rows
 - ``body_sim.pipeline.rollup_body_comp`` to expose a daily-aggregate flag
-- (future) ``foodlog-adu`` to set per-observation sigma_obs
+- ``foodlog-adu`` Phase-2 fit to set per-observation sigma_obs
 """
 
 import datetime
@@ -22,35 +44,14 @@ from typing import Literal
 
 Protocol = Literal["controlled_morning", "controlled_evening", "uncontrolled"]
 
-# Date the user committed to consistent morning weigh-ins. Same morning slot
-# applied retroactively is NOT trusted — there's no record of whether the
-# pre-cutoff morning weigh-ins followed the same post-void / pre-breakfast
-# discipline.
+# Date the user committed to a consistent once-daily morning weigh-in routine.
+# Pre-cutoff readings are NOT trusted — there's no record of whether they
+# followed the same post-void / pre-breakfast / consistent-clothing discipline.
 WEIGH_IN_PROTOCOL_CUTOFF: datetime.date = datetime.date(2026, 5, 21)
-
-MORNING_HOUR_LO: int = 7
-MORNING_HOUR_HI: int = 11
-EVENING_HOUR_LO: int = 19
-EVENING_HOUR_HI: int = 22
-
-
-def _in_window(hour: int, minute: int, lo: int, hi: int) -> bool:
-    """Return True if (hour:minute) falls in [lo:00, hi:00] inclusive on both ends."""
-    if hour < lo or hour > hi:
-        return False
-    if hour == hi and minute > 0:
-        return False
-    return True
 
 
 def classify_protocol(measured_at: datetime.datetime) -> Protocol:
-    """Return the protocol label for a weigh-in datetime."""
+    """Return the protocol label for a weigh-in datetime (scheme B: cutoff-only)."""
     if measured_at.date() < WEIGH_IN_PROTOCOL_CUTOFF:
         return "uncontrolled"
-    hour = measured_at.hour
-    minute = measured_at.minute
-    if _in_window(hour, minute, MORNING_HOUR_LO, MORNING_HOUR_HI):
-        return "controlled_morning"
-    if _in_window(hour, minute, EVENING_HOUR_LO, EVENING_HOUR_HI):
-        return "controlled_evening"
-    return "uncontrolled"
+    return "controlled_morning"
