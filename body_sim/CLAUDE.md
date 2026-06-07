@@ -56,6 +56,21 @@ The rest of the body_composition history is a consistent post-void naked morning
 
 If a single methodologically-clean reading later proves to be a real outlier (illness, dehydration, hardware fault) and you want to exclude it, the same mechanism applies — get the row's `external_id` from `body_composition.external_id` and add it to the constant.
 
+## Intake completeness (`intake_logged`)
+
+`rollup_food` flags each day's intake as complete via a **hybrid calorie + eating-occasion** rule (`foodlog-asd`), not meal-type diversity:
+
+```
+intake_logged = (intake_kcal >= INTAKE_COMPLETE_KCAL_FLOOR)        # calories vouch
+             or (n_eating_occasions >= INTAKE_COMPLETE_MIN_OCCASIONS)  # occasions vouch
+```
+
+Constants live in `body_sim/config.py` (`INTAKE_COMPLETE_KCAL_FLOOR=1500.0`, `INTAKE_COMPLETE_MIN_OCCASIONS=3`), grounded in the user's own daily-intake distribution. `n_eating_occasions` = distinct `submission_id` per day (a multi-item meal logged together counts once).
+
+**Why not meal-type coverage:** the old flag was `intake_coverage >= 0.67`, where `intake_coverage = len({breakfast,lunch,dinner} present)/3`. That systematically under-read this user's fully-logged days — breakfast is logged ~53% of days (morning food → "snack"), 17% of calories are "snack", and big evening meals are sometimes mislabeled. Meal-type labels **don't affect the energy-balance fit** (it consumes daily total `intake_kcal`), so completeness must track calories + occasions, not label taxonomy. `intake_coverage` is retained as a **display-only** number; do not gate on it.
+
+**Caveat:** the calorie floor is a single-user constant. If intake patterns shift materially (a sustained cut or bulk), revisit it — ideally scale it with estimated maintenance/TDEE once that's personalized. The ambiguous band is 2-occasion days, which defer entirely to the calorie floor.
+
 ## Weigh-in protocol metadata
 
 Each `body_composition` row carries a `weigh_in_protocol` string column. Classification uses **scheme B — cutoff-date only** (`foodlog-aou`, 2026-06-06):

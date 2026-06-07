@@ -16,7 +16,7 @@ import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from body_sim import baseline, keytel
+from body_sim import baseline, config, keytel
 
 from foodlog.db.models import (
     BodyComposition,
@@ -61,11 +61,24 @@ def rollup_food(
         fat_g             — total fat (NaN if no entries)
         sodium_mg         — total sodium (NaN if no entries)
         meal_types_logged — frozenset of meal_type strings present
-        intake_coverage   — fraction of {breakfast, lunch, dinner} logged (0.0–1.0)
-        intake_logged     — True if coverage >= 0.67
+        intake_coverage   — fraction of {breakfast, lunch, dinner} logged (0.0–1.0).
+                            DISPLAY ONLY — meal-type diversity, NOT the
+                            completeness gate (see intake_logged).
+        n_eating_occasions— count of distinct submission_id values that day (one
+                            logging event ≈ one eating occasion; a multi-item
+                            meal logged together counts once).
+        intake_logged     — hybrid completeness flag (foodlog-asd): True iff
+                            intake_kcal >= INTAKE_COMPLETE_KCAL_FLOOR OR
+                            n_eating_occasions >= INTAKE_COMPLETE_MIN_OCCASIONS.
+                            Calories vouch for a full day even from one occasion;
+                            otherwise enough distinct occasions vouch for a
+                            tracked (if light) day. Meal-type labels are NOT used
+                            — they don't affect the energy-balance fit and
+                            systematically under-read this user's snack-heavy /
+                            no-breakfast days.
 
-    Snacks are included in calorie/macro totals but are excluded from the
-    coverage calculation (coverage counts only the three main meal types).
+    Snacks are included in calorie/macro totals. The legacy intake_coverage
+    number still counts only the three main meal types (kept for display).
 
     If the same meal_type is logged twice on the same day both rows contribute
     to calorie/macro sums and the meal_type is counted once for coverage — the
@@ -98,6 +111,27 @@ def rollup_food(
         .group_by("d", FoodEntry.meal_type)
         .all()
     )
+
+    # Distinct eating occasions per day (one submission_id ≈ one logging event;
+    # a multi-item meal logged together shares an id and counts once). NULL
+    # submission_ids (legacy rows) are ignored by COUNT(DISTINCT ...), so such
+    # days fall back to the calorie-only completeness path.
+    occ_rows = (
+        session.query(
+            func.date(FoodEntry.logged_at).label("d"),
+            func.count(func.distinct(FoodEntry.submission_id)).label("n_occ"),
+        )
+        .filter(
+            func.date(FoodEntry.logged_at) >= start_iso,
+            func.date(FoodEntry.logged_at) <= end_iso,
+        )
+        .group_by("d")
+        .all()
+    )
+    occ_by_day = {
+        (r.d if isinstance(r.d, datetime.date) else datetime.date.fromisoformat(str(r.d))): int(r.n_occ or 0)
+        for r in occ_rows
+    }
 
     # Build per-day aggregates
     per_day: dict[datetime.date, dict] = {}
@@ -132,6 +166,11 @@ def rollup_food(
             cell = per_day[d]
             main_meals = {"breakfast", "lunch", "dinner"} & cell["meal_types_logged"]
             coverage = len(main_meals) / 3.0
+            n_occ = occ_by_day.get(d, 0)
+            intake_complete = (
+                cell["intake_kcal"] >= config.INTAKE_COMPLETE_KCAL_FLOOR
+                or n_occ >= config.INTAKE_COMPLETE_MIN_OCCASIONS
+            )
             records.append(
                 {
                     "intake_kcal": cell["intake_kcal"],
@@ -141,7 +180,8 @@ def rollup_food(
                     "sodium_mg": cell["sodium_mg"],
                     "meal_types_logged": frozenset(cell["meal_types_logged"]),
                     "intake_coverage": coverage,
-                    "intake_logged": bool(coverage >= 0.67),
+                    "n_eating_occasions": n_occ,
+                    "intake_logged": bool(intake_complete),
                 }
             )
         else:
@@ -154,6 +194,7 @@ def rollup_food(
                     "sodium_mg": np.nan,
                     "meal_types_logged": frozenset(),
                     "intake_coverage": 0.0,
+                    "n_eating_occasions": 0,
                     "intake_logged": False,
                 }
             )
