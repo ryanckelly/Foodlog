@@ -443,6 +443,40 @@ async def test_rollup_posts_correct_body_and_returns_points():
     assert sent["range"]["startTime"] == "2026-04-12T11:50:00Z"
     assert sent["range"]["endTime"]   == "2026-04-12T12:50:00Z"
     assert sent["windowSize"] == "900s"
+    # 1-hour range at 15-min windows = 4 windows; pageSize must equal the
+    # window count, not a fixed oversized constant (see rollup-cap test).
+    assert sent["pageSize"] == 4
+
+
+@pytest.mark.asyncio
+async def test_rollup_pagesize_respects_window_duration_cap():
+    """Regression: Google's :rollUp now rejects requests where
+    ``windowSize * pageSize`` exceeds a per-type max duration
+    (INVALID_ROLLUP_QUERY_DURATION; heart-rate cap = 14 days, June 2026).
+
+    Our old code hardcoded ``pageSize: 10000``, so 900s * 10000 ≈ 104 days,
+    which Google rejected outright — silently freezing all interval/timeline
+    data. pageSize must be sized to the requested range so that
+    ``windowSize_s * pageSize`` never exceeds the range itself."""
+    HR_CAP_DAYS = 14
+    async with httpx.AsyncClient() as http:
+        with respx.mock(base_url="https://health.googleapis.com") as mock:
+            route = mock.post(url__regex=r".*/heart-rate/dataPoints:rollUp.*").mock(
+                return_value=httpx.Response(200, json={"rollupDataPoints": []})
+            )
+            client = GoogleHealthClient(http, access_token="test")
+            # A full 14-day chunk — the largest range list_hr_intervals issues.
+            since = datetime.datetime(2026, 3, 1, 0, 0, 0)
+            until = since + datetime.timedelta(days=14)
+            await client._rollup("heart-rate", since, until, window_size_s=900)
+
+    sent = json.loads(route.calls.last.request.content)
+    window_s = int(sent["windowSize"].rstrip("s"))
+    covered_days = window_s * sent["pageSize"] / 86400.0
+    assert covered_days <= HR_CAP_DAYS, (
+        f"window_size * page_size = {covered_days:.1f} days exceeds Google's "
+        f"{HR_CAP_DAYS}-day cap for heart-rate -> INVALID_ROLLUP_QUERY_DURATION"
+    )
 
 
 @pytest.mark.asyncio

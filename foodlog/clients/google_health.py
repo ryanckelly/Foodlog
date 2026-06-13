@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import math
 from dataclasses import dataclass
 from typing import AsyncIterator
 
@@ -418,16 +419,28 @@ class GoogleHealthClient:
             f"{BASE_URL}/{API_VERSION}/users/me/dataTypes/{data_type}/"
             f"dataPoints:rollUp"
         )
-        # Google requires pageSize >= number-of-windows-in-range. For our 90-day
-        # × 15-min range that's 8640; for the 14-day HR chunks it's 1344. Setting
-        # 10000 covers both without us having to plumb the count through.
+        # pageSize MUST be sized to the requested range. As of ~2026-06-01 Google
+        # rejects any :rollUp where `windowSize * pageSize` exceeds a per-type max
+        # duration (INVALID_ROLLUP_QUERY_DURATION; heart-rate 14 days, steps/
+        # distance/floors/active-zone-minutes 90 days). The old fixed
+        # `pageSize: 10000` meant 900s × 10000 ≈ 104 days — over every cap — so
+        # every interval/timeline sync silently 400'd and the data froze.
+        #
+        # pageSize no longer caps the number of returned rows (a single response
+        # returns every window in the range regardless), so we set it to exactly
+        # the window count: windowSize × pageSize then equals the range duration,
+        # which each caller already keeps within its type's cap (HR chunks at
+        # 14 days; activity/AZM backfill at 90 days). No client-side pagination
+        # is needed — :rollUp does not emit nextPageToken for in-cap ranges.
+        span_s = max(0.0, (until - since).total_seconds())
+        n_windows = max(1, math.ceil(span_s / window_size_s))
         body = {
             "range": {
                 "startTime": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "endTime":   until.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
             "windowSize": f"{window_size_s}s",
-            "pageSize": 10000,
+            "pageSize": n_windows,
         }
         resp = await self._http.post(url, json=body, headers=self._auth_header)
         if resp.status_code == 429:
